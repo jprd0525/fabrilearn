@@ -52,15 +52,10 @@ export async function listContent() {
   }
 }
 
-// Base URL the iframe uses to load a course's package through the proxy.
-// The proxy serves index.html at the root and every relative asset beneath it.
+// Base URL for a course's package through the proxy (used internally by
+// fetchLaunchDoc to resolve asset paths).
 export function contentBaseUrl(courseId) {
   return `${SERVE_BASE}/serve/${encodeURIComponent(courseId)}`;
-}
-
-// Convenience: the launch URL for a course.
-export function launchUrl(courseId) {
-  return `${contentBaseUrl(courseId)}/index.html`;
 }
 
 // Fetch the launch HTML and INLINE its CSS/JS so the whole module is one

@@ -16,7 +16,7 @@ import { Button, Pill, StatusPill } from "./ui";
 import { defaultAckText } from "./fab-attest";
 import { STATUS } from "./fab-model";
 import { createScormRuntime, persistableCmi, isPassingStatus, TEST_SCO_HTML } from "./fab-scorm";
-import { contentBaseUrl, fetchLaunchDoc } from "./fab-content";
+import { fetchLaunchDoc } from "./fab-content";
 import {
   HardHat, LogOut, ChevronDown, ChevronLeft, PlayCircle, CheckCircle2, PenLine, FileText,
   Clock, ShieldCheck, Sparkles, BookOpen, ExternalLink,

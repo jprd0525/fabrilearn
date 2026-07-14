@@ -16,6 +16,7 @@ import { Button, Pill, StatusPill } from "./ui";
 import { defaultAckText } from "./fab-attest";
 import { STATUS } from "./fab-model";
 import { createScormRuntime, persistableCmi, isPassingStatus, TEST_SCO_HTML } from "./fab-scorm";
+import { contentBaseUrl } from "./fab-content";
 import {
   HardHat, LogOut, ChevronDown, PlayCircle, CheckCircle2, PenLine, FileText,
   Clock, ShieldCheck, Sparkles, BookOpen, ExternalLink,
@@ -259,6 +260,11 @@ function ModuleModal({ employee, assignment, onClose, onCompleted }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [done]);
 
+  // Real content when the module is mapped to a ConSRT course; otherwise the
+  // bundled test module (proves the runtime with no content dependency).
+  const courseId = assignment.module?.contentCourseId || null;
+  const realSrc = courseId ? `${contentBaseUrl(courseId)}/index.html` : null;
+
   return (
     <Overlay onClose={onClose}>
       <div className="w-full max-w-2xl overflow-hidden rounded-2xl bg-white shadow-xl">
@@ -269,13 +275,23 @@ function ModuleModal({ employee, assignment, onClose, onCompleted }) {
           </div>
           <button onClick={onClose} className="rounded-md p-1 text-stone-400 hover:bg-stone-100">✕</button>
         </div>
-        <iframe
-          title={assignment.module?.title || "module"}
-          srcDoc={TEST_SCO_HTML}
-          className="h-[26rem] w-full border-0 bg-stone-50"
-        />
+        {realSrc ? (
+          <iframe
+            title={assignment.module?.title || "module"}
+            src={realSrc}
+            className="h-[26rem] w-full border-0 bg-stone-50"
+          />
+        ) : (
+          <iframe
+            title={assignment.module?.title || "module"}
+            srcDoc={TEST_SCO_HTML}
+            className="h-[26rem] w-full border-0 bg-stone-50"
+          />
+        )}
         <div className="border-t border-stone-100 px-5 py-2 text-[0.68rem] text-stone-400">
-          Preview module · the real content for {assignment.moduleCode} loads here once packages are wired (Stage 6 storage).
+          {realSrc
+            ? <>Live content · {courseId}</>
+            : <>Preview module · real content for {assignment.moduleCode} loads here once its package is approved in the pipeline.</>}
         </div>
       </div>
     </Overlay>

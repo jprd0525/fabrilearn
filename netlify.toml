@@ -1,3 +1,26 @@
 [build]
   command = "npm run build"
   publish = "dist"
+
+# ── Same-origin SCORM content proxy ──────────────────────────────────────────
+# The SCORM iframe must load from the SAME origin as the app, or the browser's
+# same-origin policy blocks the module's window.parent.API handshake. So instead
+# of pointing the iframe at the Supabase function URL (a different origin), we
+# point it at /content/* on our own domain and transparently forward to the
+# content-proxy Edge Function. status=200 makes it a proxy (rewrite), not a
+# redirect, so the browser never sees the cross-origin URL.
+#
+# NOTE: the Supabase project ref below must match the FabriLearn project.
+[[redirects]]
+  from = "/content/*"
+  to = "https://oxzdfzuzumadjwkxcgxz.supabase.co/functions/v1/content-proxy/:splat"
+  status = 200
+  force = true
+
+# ── SPA fallback ─────────────────────────────────────────────────────────────
+# Single-page app: every non-file route serves index.html so client-side routing
+# and page refreshes work. Kept last so it doesn't shadow the /content proxy.
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200

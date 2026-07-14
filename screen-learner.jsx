@@ -18,7 +18,7 @@ import { STATUS } from "./fab-model";
 import { createScormRuntime, persistableCmi, isPassingStatus, TEST_SCO_HTML } from "./fab-scorm";
 import { contentBaseUrl, fetchLaunchDoc } from "./fab-content";
 import {
-  HardHat, LogOut, ChevronDown, PlayCircle, CheckCircle2, PenLine, FileText,
+  HardHat, LogOut, ChevronDown, ChevronLeft, PlayCircle, CheckCircle2, PenLine, FileText,
   Clock, ShieldCheck, Sparkles, BookOpen, ExternalLink,
 } from "lucide-react";
 
@@ -280,24 +280,29 @@ function ModuleModal({ employee, assignment, onClose, onCompleted }) {
   }, [courseId]);
 
   return (
-    <Overlay onClose={onClose}>
-      <div className="w-full max-w-2xl overflow-hidden rounded-2xl bg-white shadow-xl">
-        <div className="flex items-center justify-between border-b border-stone-100 px-5 py-3">
-          <div>
-            <div className="text-sm font-semibold text-stone-800">{assignment.module?.title}</div>
-            <div className="text-xs text-stone-400">{assignment.moduleCode} · SCORM 1.2 · 80% to pass</div>
-          </div>
-          <button onClick={onClose} className="rounded-md p-1 text-stone-400 hover:bg-stone-100">✕</button>
+    <div className="fixed inset-0 z-50 flex flex-col bg-stone-900/95">
+      {/* Header bar: title + clear exit back to the training list */}
+      <div className="flex items-center justify-between border-b border-stone-700 bg-stone-800 px-4 py-2.5 text-white">
+        <div className="min-w-0">
+          <div className="truncate text-sm font-semibold">{assignment.module?.title}</div>
+          <div className="text-xs text-stone-400">{assignment.moduleCode} · SCORM 1.2 · 80% to pass</div>
         </div>
+        <button onClick={onClose}
+          className="ml-4 inline-flex shrink-0 items-center gap-1.5 rounded-lg bg-stone-700 px-3 py-1.5 text-sm font-medium hover:bg-stone-600">
+          <ChevronLeft className="h-4 w-4" /> Back to my training
+        </button>
+      </div>
 
+      {/* Content area fills the rest of the screen */}
+      <div className="relative flex-1 bg-white">
         {loadState === "loading" && (
-          <div className="flex h-[26rem] items-center justify-center bg-stone-50 text-sm text-stone-400">Loading module…</div>
+          <div className="flex h-full items-center justify-center text-sm text-stone-400">Loading module…</div>
         )}
         {loadState === "error" && (
-          <div className="flex h-[26rem] flex-col items-center justify-center gap-2 bg-stone-50 px-6 text-center">
+          <div className="flex h-full flex-col items-center justify-center gap-2 px-6 text-center">
             <div className="text-sm font-medium text-stone-600">Couldn't load this module's content</div>
-            <div className="text-xs text-stone-400">The training package for {courseId} couldn't be reached. Falling back to preview.</div>
-            <iframe title="fallback" srcDoc={TEST_SCO_HTML} className="mt-2 h-[16rem] w-full border-0" />
+            <div className="text-xs text-stone-400">The training package for {courseId} couldn't be reached. Showing the preview module instead.</div>
+            <iframe title="fallback" srcDoc={TEST_SCO_HTML} className="mt-2 h-[70%] w-full max-w-3xl border border-stone-200" />
           </div>
         )}
         {loadState === "live" && (
@@ -305,25 +310,26 @@ function ModuleModal({ employee, assignment, onClose, onCompleted }) {
             title={assignment.module?.title || "module"}
             srcDoc={realHtml}
             sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-modals"
-            className="h-[26rem] w-full border-0 bg-stone-50"
+            className="h-full w-full border-0"
           />
         )}
         {loadState === "test" && (
           <iframe
             title={assignment.module?.title || "module"}
             srcDoc={TEST_SCO_HTML}
-            className="h-[26rem] w-full border-0 bg-stone-50"
+            className="mx-auto h-full w-full max-w-3xl border-0"
           />
         )}
-
-        <div className="border-t border-stone-100 px-5 py-2 text-[0.68rem] text-stone-400">
-          {loadState === "live" ? <>Live content · {courseId}</>
-            : loadState === "test" ? <>Preview module · real content for {assignment.moduleCode} loads here once its package is approved in the pipeline.</>
-            : loadState === "error" ? <>Content unavailable · showing preview</>
-            : <>Loading…</>}
-        </div>
       </div>
-    </Overlay>
+
+      {/* Footer status strip */}
+      <div className="border-t border-stone-700 bg-stone-800 px-4 py-1.5 text-center text-[0.68rem] text-stone-400">
+        {loadState === "live" ? <>Live content · {courseId} · your progress is saved as you go</>
+          : loadState === "test" ? <>Preview module · real content for {assignment.moduleCode} loads here once its package is approved</>
+          : loadState === "error" ? <>Content unavailable · showing preview</>
+          : <>Loading…</>}
+      </div>
+    </div>
   );
 }
 

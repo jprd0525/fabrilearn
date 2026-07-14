@@ -279,6 +279,7 @@ function ModuleModal({ employee, assignment, onClose, onCompleted }) {
           <iframe
             title={assignment.module?.title || "module"}
             src={realSrc}
+            sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-modals"
             className="h-[26rem] w-full border-0 bg-stone-50"
           />
         ) : (

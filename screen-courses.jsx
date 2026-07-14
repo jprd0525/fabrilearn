@@ -6,11 +6,13 @@
 //   • Training profiles — reusable module sets that roles point at. This is the
 //     profile-contents editor promised on the Settings screen.
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect, useRef } from "react";
 import { useShop } from "./shop-context";
 import { Button, Card, Field, TextInput, Select, Modal, EmptyState, Pill, SectionTitle } from "./ui";
 import { RECURRENCE, isTimeBased } from "./fab-model";
-import { BookOpen, Layers, Pencil, Trash2, Plus, Check, AlertCircle } from "lucide-react";
+import { createScormRuntime } from "./fab-scorm";
+import { fetchLaunchDoc } from "./fab-content";
+import { BookOpen, Layers, Pencil, Trash2, Plus, Check, AlertCircle, PlayCircle, X } from "lucide-react";
 
 const RECURRENCE_OPTIONS = Object.entries(RECURRENCE).map(([key, r]) => ({ key, label: r.label }));
 
@@ -47,6 +49,7 @@ function TabBtn({ on, onClick, icon: Icon, children }) {
 function ModuleCatalogue() {
   const { shop, api } = useShop();
   const [savedCode, setSavedCode] = useState(null);
+  const [previewMod, setPreviewMod] = useState(null);
 
   const byArea = useMemo(() => {
     const m = {};
@@ -84,6 +87,17 @@ function ModuleCatalogue() {
                     <td className="px-4 py-2.5">
                       <span className="font-mono text-xs text-stone-400">{m.code}</span>
                       <span className="ml-2 text-stone-700">{m.title}</span>
+                      {m.contentCourseId
+                        ? <span className="ml-2 rounded-full bg-emerald-50 px-1.5 py-0.5 text-[0.6rem] font-medium text-emerald-600">content</span>
+                        : <span className="ml-2 text-[0.6rem] text-stone-300">no package</span>}
+                    </td>
+                    <td className="w-24 px-2 py-2.5">
+                      {m.contentCourseId && (
+                        <button onClick={() => setPreviewMod(m)}
+                          className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs text-stone-500 hover:bg-stone-100 hover:text-stone-700">
+                          <PlayCircle className="h-3.5 w-3.5" /> Preview
+                        </button>
+                      )}
                     </td>
                     <td className="w-56 px-4 py-2.5">
                       <div className="flex items-center gap-2">
@@ -108,6 +122,62 @@ function ModuleCatalogue() {
         <AlertCircle className="mr-1 inline h-3.5 w-3.5 text-stone-300" />
         Trigger-based intervals (on change / before operating / on assignment) have no automatic clock — those modules go due only when flagged.
       </p>
+
+      {previewMod && <AdminModulePreview module={previewMod} onClose={() => setPreviewMod(null)} />}
+    </div>
+  );
+}
+
+// Admin-side SCORM preview: play any module's approved package straight from the
+// back end, for QA / reference. Read-only — no completion, no records touched.
+function AdminModulePreview({ module, onClose }) {
+  const [state, setState] = useState("loading"); // loading | live | error
+  const [html, setHtml] = useState(null);
+  const runtimeRef = useRef(null);
+
+  if (!runtimeRef.current) {
+    // A no-op runtime so the package's SCORM calls succeed silently during preview.
+    runtimeRef.current = createScormRuntime({ studentId: "admin", studentName: "Preview" });
+    if (typeof window !== "undefined") window.API = runtimeRef.current.api;
+  }
+
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      const r = await fetchLaunchDoc(module.contentCourseId);
+      if (!alive) return;
+      if (r.ok) { setHtml(r.html); setState("live"); } else { setState("error"); }
+    })();
+    return () => {
+      alive = false;
+      if (typeof window !== "undefined" && window.API === runtimeRef.current?.api) delete window.API;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  return (
+    <div className="fixed inset-0 z-50 flex flex-col bg-stone-900/95">
+      <div className="flex items-center justify-between border-b border-stone-700 bg-stone-800 px-4 py-2.5 text-white">
+        <div className="min-w-0">
+          <div className="flex items-center gap-2">
+            <span className="truncate text-sm font-semibold">{module.title}</span>
+            <span className="shrink-0 rounded-full bg-amber-500/20 px-2 py-0.5 text-[0.65rem] font-medium text-amber-300">Admin preview</span>
+          </div>
+          <div className="text-xs text-stone-400">{module.code} · {module.contentCourseId} · nothing is recorded</div>
+        </div>
+        <button onClick={onClose} className="ml-4 inline-flex shrink-0 items-center gap-1.5 rounded-lg bg-stone-700 px-3 py-1.5 text-sm font-medium hover:bg-stone-600">
+          <X className="h-4 w-4" /> Close
+        </button>
+      </div>
+      <div className="flex-1 bg-white">
+        {state === "loading" && <div className="flex h-full items-center justify-center text-sm text-stone-400">Loading package…</div>}
+        {state === "error" && <div className="flex h-full items-center justify-center px-6 text-center text-sm text-stone-500">Couldn't load the package for {module.contentCourseId}. It may not have an approved version yet.</div>}
+        {state === "live" && (
+          <iframe title={module.title} srcDoc={html}
+            sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-modals"
+            className="h-full w-full border-0" />
+        )}
+      </div>
     </div>
   );
 }

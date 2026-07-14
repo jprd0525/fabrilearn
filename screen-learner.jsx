@@ -61,6 +61,7 @@ export default function LearnerPreview() {
 function LearnerHome({ employee }) {
   const { shop, assignmentsByEmployee, readinessFor, attestationFor } = useShop();
   const [openMod, setOpenMod] = useState(null);
+  const [reviewMod, setReviewMod] = useState(null);
   const [attestMod, setAttestMod] = useState(null);
   const [ackDoc, setAckDoc] = useState(null);
 
@@ -174,7 +175,17 @@ function LearnerHome({ employee }) {
         <Section title="Completed" icon={ShieldCheck} count={buckets.done.length} muted>
           {buckets.done.map((a) => (
             <LearnerRow key={a.id} a={a}
-              right={<span className="inline-flex items-center gap-1.5 text-xs text-emerald-700"><CheckCircle2 className="h-3.5 w-3.5" /> {a.status}</span>} />
+              right={
+                <div className="flex items-center gap-3">
+                  <span className="inline-flex items-center gap-1.5 text-xs text-emerald-700"><CheckCircle2 className="h-3.5 w-3.5" /> {a.status}</span>
+                  {a.module?.contentCourseId && (
+                    <button onClick={() => setReviewMod(a)}
+                      className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs text-stone-500 hover:bg-stone-100 hover:text-stone-700">
+                      <BookOpen className="h-3.5 w-3.5" /> Review
+                    </button>
+                  )}
+                </div>
+              } />
           ))}
         </Section>
       )}
@@ -184,6 +195,9 @@ function LearnerHome({ employee }) {
         needsAttestation={!attestationFor(employee.id, openMod.moduleCode)}
         onClose={() => setOpenMod(null)}
         onCompleted={(a) => { setOpenMod(null); if (!attestationFor(employee.id, a.moduleCode)) setAttestMod(a); }} />}
+      {reviewMod && <ModuleModal
+        employee={employee} assignment={reviewMod} reviewMode
+        onClose={() => setReviewMod(null)} onCompleted={() => setReviewMod(null)} />}
       {attestMod && <AttestModal employee={employee} assignment={attestMod} onClose={() => setAttestMod(null)} />}
       {ackDoc && <DocAckModal employee={employee} doc={ackDoc} onClose={() => setAckDoc(null)} />}
     </div>
@@ -228,7 +242,7 @@ function LearnerRow({ a, right }) {
 // For the pilot this plays a bundled test module (proving the runtime end-to-end);
 // real packages swap in once Storage + the 23 packages are wired. Completion comes
 // from the module calling LMSFinish with a passing score, not a manual button.
-function ModuleModal({ employee, assignment, onClose, onCompleted, needsAttestation }) {
+function ModuleModal({ employee, assignment, onClose, onCompleted, needsAttestation, reviewMode = false }) {
   const { api, scormRunFor, assignmentsByEmployee } = useShop();
   const runtimeRef = useRef(null);
   const [done, setDone] = useState(false);
@@ -241,8 +255,11 @@ function ModuleModal({ employee, assignment, onClose, onCompleted, needsAttestat
       studentId: employee.id,
       studentName: employee.name,
       initialCmi,
-      onCommit: (cmi) => api.saveScormRun(employee.id, assignment.moduleCode, persistableCmi(cmi)),
+      // In review mode we do NOT persist runs or record completion — revisiting
+      // finished content must never disturb the learner's record.
+      onCommit: reviewMode ? undefined : (cmi) => api.saveScormRun(employee.id, assignment.moduleCode, persistableCmi(cmi)),
       onFinish: ({ cmi, status, score }) => {
+        if (reviewMode) return;
         api.saveScormRun(employee.id, assignment.moduleCode, persistableCmi(cmi));
         if (isPassingStatus(status)) {
           api.complete(assignment.id, score);
@@ -255,7 +272,7 @@ function ModuleModal({ employee, assignment, onClose, onCompleted, needsAttestat
   }
 
   useEffect(() => {
-    if (!assignment.startedOn && !assignment.completedOn) api.start(assignment.id);
+    if (!reviewMode && !assignment.startedOn && !assignment.completedOn) api.start(assignment.id);
     return () => { if (typeof window !== "undefined" && window.API === runtimeRef.current?.api) delete window.API; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -294,12 +311,15 @@ function ModuleModal({ employee, assignment, onClose, onCompleted, needsAttestat
       {/* Header bar: title + clear exit back to the training list */}
       <div className="flex items-center justify-between border-b border-stone-700 bg-stone-800 px-4 py-2.5 text-white">
         <div className="min-w-0">
-          <div className="truncate text-sm font-semibold">{assignment.module?.title}</div>
-          <div className="text-xs text-stone-400">{assignment.moduleCode} · SCORM 1.2 · 80% to pass</div>
+          <div className="flex items-center gap-2">
+            <span className="truncate text-sm font-semibold">{assignment.module?.title}</span>
+            {reviewMode && <span className="shrink-0 rounded-full bg-sky-500/20 px-2 py-0.5 text-[0.65rem] font-medium text-sky-300">Review</span>}
+          </div>
+          <div className="text-xs text-stone-400">{assignment.moduleCode} · {reviewMode ? "revisiting — your record is unchanged" : "SCORM 1.2 · 80% to pass"}</div>
         </div>
         <button onClick={onClose}
           className="ml-4 inline-flex shrink-0 items-center gap-1.5 rounded-lg bg-stone-700 px-3 py-1.5 text-sm font-medium hover:bg-stone-600">
-          <ChevronLeft className="h-4 w-4" /> Back to my training
+          <ChevronLeft className="h-4 w-4" /> {reviewMode ? "Close" : "Back to my training"}
         </button>
       </div>
 

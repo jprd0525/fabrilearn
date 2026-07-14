@@ -19,7 +19,7 @@ import { createScormRuntime, persistableCmi, isPassingStatus, TEST_SCO_HTML } fr
 import { fetchLaunchDoc } from "./fab-content";
 import {
   HardHat, LogOut, ChevronDown, ChevronLeft, PlayCircle, CheckCircle2, PenLine, FileText,
-  Clock, ShieldCheck, Sparkles, BookOpen, ExternalLink,
+  Clock, ShieldCheck, Sparkles, BookOpen, ExternalLink, Check,
 } from "lucide-react";
 
 export default function LearnerPreview() {
@@ -179,7 +179,11 @@ function LearnerHome({ employee }) {
         </Section>
       )}
 
-      {openMod && <ModuleModal employee={employee} assignment={openMod} onClose={() => setOpenMod(null)} onCompleted={(a) => { setOpenMod(null); if (!attestationFor(employee.id, a.moduleCode)) setAttestMod(a); }} />}
+      {openMod && <ModuleModal
+        employee={employee} assignment={openMod}
+        needsAttestation={!attestationFor(employee.id, openMod.moduleCode)}
+        onClose={() => setOpenMod(null)}
+        onCompleted={(a) => { setOpenMod(null); if (!attestationFor(employee.id, a.moduleCode)) setAttestMod(a); }} />}
       {attestMod && <AttestModal employee={employee} assignment={attestMod} onClose={() => setAttestMod(null)} />}
       {ackDoc && <DocAckModal employee={employee} doc={ackDoc} onClose={() => setAckDoc(null)} />}
     </div>
@@ -224,10 +228,11 @@ function LearnerRow({ a, right }) {
 // For the pilot this plays a bundled test module (proving the runtime end-to-end);
 // real packages swap in once Storage + the 23 packages are wired. Completion comes
 // from the module calling LMSFinish with a passing score, not a manual button.
-function ModuleModal({ employee, assignment, onClose, onCompleted }) {
-  const { api, scormRunFor } = useShop();
+function ModuleModal({ employee, assignment, onClose, onCompleted, needsAttestation }) {
+  const { api, scormRunFor, assignmentsByEmployee } = useShop();
   const runtimeRef = useRef(null);
   const [done, setDone] = useState(false);
+  const [passScore, setPassScore] = useState(null);
 
   // Build the runtime once and expose it as window.API before the iframe loads.
   if (!runtimeRef.current) {
@@ -241,7 +246,8 @@ function ModuleModal({ employee, assignment, onClose, onCompleted }) {
         api.saveScormRun(employee.id, assignment.moduleCode, persistableCmi(cmi));
         if (isPassingStatus(status)) {
           api.complete(assignment.id, score);
-          setDone(true);
+          setPassScore(score);
+          setDone(true);   // shows the completion celebration (does NOT auto-close)
         }
       },
     });
@@ -253,12 +259,6 @@ function ModuleModal({ employee, assignment, onClose, onCompleted }) {
     return () => { if (typeof window !== "undefined" && window.API === runtimeRef.current?.api) delete window.API; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-
-  // When the module reports a passing finish, close and hand off to attestation.
-  useEffect(() => {
-    if (done) { const a = assignment; onClose(); onCompleted(a); }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [done]);
 
   // Real content when the module is mapped to a ConSRT course; otherwise the
   // bundled test module (proves the runtime with no content dependency).
@@ -278,6 +278,16 @@ function ModuleModal({ employee, assignment, onClose, onCompleted }) {
     return () => { alive = false; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [courseId]);
+
+  // Celebration takes over the whole player once the module is passed.
+  if (done) {
+    return <ModuleComplete
+      employee={employee} assignment={assignment} score={passScore}
+      needsAttestation={needsAttestation}
+      onContinue={() => { const a = assignment; onClose(); onCompleted(a); }}
+      onBack={onClose}
+    />;
+  }
 
   return (
     <div className="fixed inset-0 z-50 flex flex-col bg-stone-900/95">
@@ -328,6 +338,81 @@ function ModuleModal({ employee, assignment, onClose, onCompleted }) {
           : loadState === "test" ? <>Preview module · real content for {assignment.moduleCode} loads here once its package is approved</>
           : loadState === "error" ? <>Content unavailable · showing preview</>
           : <>Loading…</>}
+      </div>
+    </div>
+  );
+}
+
+// ── Completion celebration ───────────────────────────────────────────────────
+// The unmissable "you passed" moment: a big green check, the score, the module
+// name, an animated progress bump, and a single clear next step. Silent completion
+// is a common LMS failure mode — this makes success impossible to miss.
+function ModuleComplete({ employee, assignment, score, needsAttestation, onContinue, onBack }) {
+  const { assignmentsByEmployee } = useShop();
+  const active = (assignmentsByEmployee[employee.id] || []).filter((a) => !a.proposed);
+  const total = active.length || 1;
+  const completed = active.filter((a) => a.completedOn && a.status !== STATUS.REFRESHER_DUE).length;
+  const prevPct = Math.round(((completed - 1) / total) * 100);
+  const nowPct = Math.round((completed / total) * 100);
+
+  // Mount animations: pop the check, then bump the progress bar prev -> now.
+  const [shown, setShown] = useState(false);
+  const [barPct, setBarPct] = useState(Math.max(0, prevPct));
+  useEffect(() => {
+    const t1 = setTimeout(() => setShown(true), 40);
+    const t2 = setTimeout(() => setBarPct(nowPct), 350);
+    return () => { clearTimeout(t1); clearTimeout(t2); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  return (
+    <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-gradient-to-b from-emerald-50 to-white px-6">
+      <div className="w-full max-w-md text-center">
+        <div
+          className="mx-auto mb-5 flex h-24 w-24 items-center justify-center rounded-full bg-emerald-500 shadow-lg shadow-emerald-200 transition-all duration-500"
+          style={{ transform: shown ? "scale(1)" : "scale(0.6)", opacity: shown ? 1 : 0 }}>
+          <Check className="h-14 w-14 text-white" strokeWidth={3} />
+        </div>
+
+        <h1 className="text-2xl font-bold text-stone-800">Module complete!</h1>
+        <p className="mt-1 text-stone-500">You passed <span className="font-medium text-stone-700">{assignment.module?.title}</span>.</p>
+
+        {score != null && (
+          <div className="mt-5 inline-flex items-baseline gap-2 rounded-2xl bg-white px-6 py-3 shadow-sm ring-1 ring-stone-100">
+            <span className="text-4xl font-bold text-emerald-600">{score}%</span>
+            <span className="text-sm text-stone-400">· passed (80% needed)</span>
+          </div>
+        )}
+
+        <div className="mt-7">
+          <div className="mb-1.5 flex items-center justify-between text-xs text-stone-500">
+            <span>Your training progress</span>
+            <span className="font-medium text-stone-700">{completed} of {total} complete</span>
+          </div>
+          <div className="h-3 overflow-hidden rounded-full bg-stone-100">
+            <div className="h-full rounded-full bg-emerald-500 transition-all duration-700 ease-out" style={{ width: `${barPct}%` }} />
+          </div>
+        </div>
+
+        <div className="mt-8 space-y-2">
+          {needsAttestation ? (
+            <>
+              <button onClick={onContinue}
+                className="flex w-full items-center justify-center gap-2 rounded-xl bg-amber-600 px-4 py-3 text-sm font-semibold text-white hover:bg-amber-700">
+                <PenLine className="h-4 w-4" /> Sign your confirmation
+              </button>
+              <p className="text-xs text-stone-400">One quick step left: confirm you understood this training.</p>
+            </>
+          ) : (
+            <button onClick={onContinue}
+              className="flex w-full items-center justify-center gap-2 rounded-xl bg-amber-600 px-4 py-3 text-sm font-semibold text-white hover:bg-amber-700">
+              Back to my training
+            </button>
+          )}
+          <button onClick={onBack} className="w-full rounded-xl px-4 py-2 text-sm text-stone-500 hover:bg-stone-100">
+            {needsAttestation ? "I'll do it later" : "Done"}
+          </button>
+        </div>
       </div>
     </div>
   );

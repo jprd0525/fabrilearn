@@ -62,3 +62,50 @@ export function contentBaseUrl(courseId) {
 export function launchUrl(courseId) {
   return `${contentBaseUrl(courseId)}/index.html`;
 }
+
+// Fetch the launch HTML and INLINE its CSS/JS so the whole module is one
+// self-contained document injected via iframe srcdoc. We inline (rather than
+// rewrite to proxy URLs) because Supabase's function gateway coerces every served
+// file's Content-Type to text/plain — and browsers refuse to apply a text/plain
+// stylesheet or execute a text/plain script. Inlining removes all external asset
+// requests, so Content-Type is irrelevant. The srcdoc document runs same-origin
+// with the parent, so the SCORM window.parent.API handshake works naturally.
+// Returns { ok, html } or { ok:false, error }.
+export async function fetchLaunchDoc(courseId) {
+  try {
+    const base = contentBaseUrl(courseId);
+    const headers = await authHeaders();
+    const getText = async (path) => {
+      const r = await fetch(`${base}/${path.replace(/^\.?\//, "")}`, { headers });
+      return r.ok ? await r.text() : null;
+    };
+
+    const res = await fetch(`${base}/index.html`, { headers });
+    if (!res.ok) return { ok: false, error: `launch fetch ${res.status}` };
+    let html = await res.text();
+
+    // Inline <link rel="stylesheet" href="...">  -> <style>...</style>
+    const linkRe = /<link\b[^>]*rel=["']?stylesheet["']?[^>]*href=["']([^"']+)["'][^>]*>/gi;
+    const linkMatches = [...html.matchAll(linkRe)];
+    for (const m of linkMatches) {
+      const href = m[1];
+      if (/^https?:|^\/\//.test(href)) continue; // leave external CDNs alone
+      const css = await getText(href);
+      if (css != null) html = html.replace(m[0], `<style>\n${css}\n</style>`);
+    }
+
+    // Inline <script src="..."></script>  -> <script>...</script>
+    const scriptRe = /<script\b[^>]*src=["']([^"']+)["'][^>]*>\s*<\/script>/gi;
+    const scriptMatches = [...html.matchAll(scriptRe)];
+    for (const m of scriptMatches) {
+      const src = m[1];
+      if (/^https?:|^\/\//.test(src)) continue;
+      const js = await getText(src);
+      if (js != null) html = html.replace(m[0], `<script>\n${js}\n</script>`);
+    }
+
+    return { ok: true, html };
+  } catch (e) {
+    return { ok: false, error: String(e) };
+  }
+}

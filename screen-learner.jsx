@@ -16,7 +16,7 @@ import { Button, Pill, StatusPill } from "./ui";
 import { defaultAckText } from "./fab-attest";
 import { STATUS } from "./fab-model";
 import { createScormRuntime, persistableCmi, isPassingStatus, TEST_SCO_HTML } from "./fab-scorm";
-import { contentBaseUrl } from "./fab-content";
+import { contentBaseUrl, fetchLaunchDoc } from "./fab-content";
 import {
   HardHat, LogOut, ChevronDown, PlayCircle, CheckCircle2, PenLine, FileText,
   Clock, ShieldCheck, Sparkles, BookOpen, ExternalLink,
@@ -263,7 +263,21 @@ function ModuleModal({ employee, assignment, onClose, onCompleted }) {
   // Real content when the module is mapped to a ConSRT course; otherwise the
   // bundled test module (proves the runtime with no content dependency).
   const courseId = assignment.module?.contentCourseId || null;
-  const realSrc = courseId ? `${contentBaseUrl(courseId)}/index.html` : null;
+  const [realHtml, setRealHtml] = useState(null);   // inlined launch doc
+  const [loadState, setLoadState] = useState(courseId ? "loading" : "test");
+
+  useEffect(() => {
+    if (!courseId) return;
+    let alive = true;
+    (async () => {
+      const r = await fetchLaunchDoc(courseId);
+      if (!alive) return;
+      if (r.ok) { setRealHtml(r.html); setLoadState("live"); }
+      else { setLoadState("error"); }
+    })();
+    return () => { alive = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [courseId]);
 
   return (
     <Overlay onClose={onClose}>
@@ -275,24 +289,38 @@ function ModuleModal({ employee, assignment, onClose, onCompleted }) {
           </div>
           <button onClick={onClose} className="rounded-md p-1 text-stone-400 hover:bg-stone-100">✕</button>
         </div>
-        {realSrc ? (
+
+        {loadState === "loading" && (
+          <div className="flex h-[26rem] items-center justify-center bg-stone-50 text-sm text-stone-400">Loading module…</div>
+        )}
+        {loadState === "error" && (
+          <div className="flex h-[26rem] flex-col items-center justify-center gap-2 bg-stone-50 px-6 text-center">
+            <div className="text-sm font-medium text-stone-600">Couldn't load this module's content</div>
+            <div className="text-xs text-stone-400">The training package for {courseId} couldn't be reached. Falling back to preview.</div>
+            <iframe title="fallback" srcDoc={TEST_SCO_HTML} className="mt-2 h-[16rem] w-full border-0" />
+          </div>
+        )}
+        {loadState === "live" && (
           <iframe
             title={assignment.module?.title || "module"}
-            src={realSrc}
+            srcDoc={realHtml}
             sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-modals"
             className="h-[26rem] w-full border-0 bg-stone-50"
           />
-        ) : (
+        )}
+        {loadState === "test" && (
           <iframe
             title={assignment.module?.title || "module"}
             srcDoc={TEST_SCO_HTML}
             className="h-[26rem] w-full border-0 bg-stone-50"
           />
         )}
+
         <div className="border-t border-stone-100 px-5 py-2 text-[0.68rem] text-stone-400">
-          {realSrc
-            ? <>Live content · {courseId}</>
-            : <>Preview module · real content for {assignment.moduleCode} loads here once its package is approved in the pipeline.</>}
+          {loadState === "live" ? <>Live content · {courseId}</>
+            : loadState === "test" ? <>Preview module · real content for {assignment.moduleCode} loads here once its package is approved in the pipeline.</>
+            : loadState === "error" ? <>Content unavailable · showing preview</>
+            : <>Loading…</>}
         </div>
       </div>
     </Overlay>

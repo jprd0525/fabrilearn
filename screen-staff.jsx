@@ -13,7 +13,7 @@ import { SEED_MODULES, daysUntil } from "./fab-model";
 import { createScormRuntime, persistableCmi, isPassingStatus, TEST_SCO_HTML } from "./fab-scorm";
 import { fetchLaunchDoc } from "./fab-content";
 import {
-  HardHat, LogOut, PlayCircle, CheckCircle2, PenLine, ChevronLeft, Check, BookOpen,
+  HardHat, LogOut, PlayCircle, CheckCircle2, PenLine, ChevronLeft, Check, BookOpen, RotateCcw,
 } from "lucide-react";
 
 // module_code -> catalogue metadata (title, area, contentCourseId, recurrence)
@@ -96,10 +96,14 @@ export default function StaffApp({ identity }) {
 
         {todo.length > 0 && (
           <Section title="To do" count={todo.length}>
-            {todo.map((a) => (
-              <Row key={a.id} a={a}
-                right={<button onClick={() => setOpenMod(a)} className="inline-flex items-center gap-1.5 rounded-lg bg-amber-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-amber-700"><PlayCircle className="h-4 w-4" /> Start</button>} />
-            ))}
+            {todo.map((a) => {
+              const run = runs[a.module_code];
+              const attemptedScore = run ? Number(run["cmi.core.score.raw"]) : null;
+              return (
+                <Row key={a.id} a={a} attemptedScore={Number.isFinite(attemptedScore) ? attemptedScore : null}
+                  right={<button onClick={() => setOpenMod(a)} className="inline-flex items-center gap-1.5 rounded-lg bg-amber-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-amber-700"><PlayCircle className="h-4 w-4" /> {run ? "Retry" : "Start"}</button>} />
+              );
+            })}
           </Section>
         )}
 
@@ -147,6 +151,8 @@ function ModulePlayer({ identity, assignment, initialCmi, needsAttestation, revi
   const runtimeRef = useRef(null);
   const [done, setDone] = useState(false);
   const [passScore, setPassScore] = useState(null);
+  const [failScore, setFailScore] = useState(null);   // set when finished below mastery
+  const [reloadKey, setReloadKey] = useState(0);      // bump to force a fresh retake
   const [realHtml, setRealHtml] = useState(null);
   const [loadState, setLoadState] = useState(courseId ? "loading" : "test");
 
@@ -172,6 +178,7 @@ function ModulePlayer({ identity, assignment, initialCmi, needsAttestation, revi
         if (reviewMode) return;
         await saveRun(cmi);
         if (isPassingStatus(status)) { await markComplete(score); setPassScore(score); setDone(true); }
+        else { setFailScore(score ?? 0); }   // below mastery -> show the "not passed" screen
       },
     });
     if (typeof window !== "undefined") window.API = runtimeRef.current.api;
@@ -187,11 +194,23 @@ function ModulePlayer({ identity, assignment, initialCmi, needsAttestation, revi
     })();
     return () => { alive = false; if (typeof window !== "undefined" && window.API === runtimeRef.current?.api) delete window.API; };
     // eslint-disable-next-line
-  }, [courseId]);
+  }, [courseId, reloadKey]);
 
   if (done) {
     return <ModuleComplete assignment={assignment} score={passScore} needsAttestation={needsAttestation}
       onContinue={() => { const a = assignment; onClose(); onCompleted(a); }} onBack={onClose} />;
+  }
+
+  if (failScore !== null) {
+    // Retake: rebuild a fresh runtime and reload the content from the top.
+    const retake = () => {
+      runtimeRef.current = null;
+      setFailScore(null);
+      setLoadState(courseId ? "loading" : "test");
+      setRealHtml(null);
+      setReloadKey((k) => k + 1);
+    };
+    return <ModuleNotPassed assignment={assignment} score={failScore} onRetake={retake} onBack={onClose} />;
   }
 
   return (
@@ -255,7 +274,36 @@ function ModuleComplete({ assignment, score, needsAttestation, onContinue, onBac
   );
 }
 
-// ── Attestation ──────────────────────────────────────────────────────────────
+// ── Not-passed state (mirror of the celebration; explicit, not harsh, no trap) ─
+function ModuleNotPassed({ assignment, score, onRetake, onBack }) {
+  const [shown, setShown] = useState(false);
+  useEffect(() => { const t = setTimeout(() => setShown(true), 40); return () => clearTimeout(t); }, []);
+  return (
+    <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-gradient-to-b from-amber-50 to-white px-6">
+      <div className="w-full max-w-md text-center">
+        <div className="mx-auto mb-5 flex h-24 w-24 items-center justify-center rounded-full bg-amber-500 shadow-lg shadow-amber-200 transition-all duration-500" style={{ transform: shown ? "scale(1)" : "scale(0.6)", opacity: shown ? 1 : 0 }}>
+          <RotateCcw className="h-12 w-12 text-white" strokeWidth={2.5} />
+        </div>
+        <h1 className="text-2xl font-bold text-stone-800">Not passed yet</h1>
+        <p className="mt-1 text-stone-500">You scored <span className="font-semibold text-stone-700">{score}%</span> on <span className="font-medium text-stone-700">{assignment.module?.title}</span>.</p>
+
+        <div className="mt-5 rounded-xl border border-amber-200 bg-amber-50 px-5 py-4 text-sm text-amber-800">
+          You need <span className="font-semibold">80% (8 of 10)</span> to complete this module. This is normal — take another run through and try again. Nothing is held against you.
+        </div>
+
+        <div className="mt-7 space-y-2">
+          <button onClick={onRetake} className="flex w-full items-center justify-center gap-2 rounded-xl bg-amber-600 px-4 py-3 text-sm font-semibold text-white hover:bg-amber-700">
+            <RotateCcw className="h-4 w-4" /> Try again
+          </button>
+          <button onClick={onBack} className="w-full rounded-xl px-4 py-2 text-sm text-stone-500 hover:bg-stone-100">
+            Back to my training
+          </button>
+          <p className="pt-1 text-xs text-stone-400">This module stays on your list until you pass.</p>
+        </div>
+      </div>
+    </div>
+  );
+}
 function AttestModal({ identity, assignment, onClose, onSigned }) {
   const [name, setName] = useState(identity?.full_name || "");
   const [busy, setBusy] = useState(false);
@@ -302,7 +350,7 @@ function Section({ title, count, muted, children }) {
     </div>
   );
 }
-function Row({ a, right }) {
+function Row({ a, right, attemptedScore }) {
   const due = a.due_on ? daysUntil(a.due_on.slice(0, 10)) : null;
   return (
     <div className="flex items-center justify-between rounded-xl border border-stone-200 bg-white px-4 py-3">
@@ -310,7 +358,8 @@ function Row({ a, right }) {
         <div className="truncate text-sm font-medium text-stone-800">{a.module?.title || a.module_code}</div>
         <div className="text-[0.7rem] text-stone-400">
           {a.module_code}
-          {!a.done && due != null && (<span className={due < 0 ? "text-rose-500" : due <= 7 ? "text-amber-600" : ""}> · {due < 0 ? `overdue by ${-due}d` : `due in ${due}d`}</span>)}
+          {!a.done && attemptedScore != null && (<span className="text-amber-600"> · attempted {attemptedScore}% — not yet passed</span>)}
+          {!a.done && attemptedScore == null && due != null && (<span className={due < 0 ? "text-rose-500" : due <= 7 ? "text-amber-600" : ""}> · {due < 0 ? `overdue by ${-due}d` : `due in ${due}d`}</span>)}
         </div>
       </div>
       <div className="ml-3 shrink-0">{right}</div>

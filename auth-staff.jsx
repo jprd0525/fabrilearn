@@ -19,7 +19,8 @@ import { useEffect, useState } from "react";
 import { supabase } from "./supabase-adapter";
 import { AuthGate } from "./auth-gate";   // engine file (untouched) — email sign-in + gate
 import AppShell from "./App.jsx";
-import StaffApp from "./screen-staff.jsx";   // the real staff dashboard (Step C)
+import StaffApp from "./screen-staff.jsx";      // staff dashboard (Step C)
+import ManagerApp from "./screen-manager.jsx";  // supervisor dashboard (Step D)
 
 // ── Root gate: session → identity resolution → route ─────────────────────────
 export function RootGate() {
@@ -60,7 +61,11 @@ export function RootGate() {
 
   if (phase === "loading" || phase === "resolving") return <Splash label={phase === "resolving" ? "Signing you in…" : "Loading…"} />;
   if (phase === "admin") return <AppShell />;
-  if (phase === "staff") return <StaffApp identity={identity} />;
+  if (phase === "staff") {
+    // Route phone users by their bound role.
+    if (identity?.role === "supervisor" || identity?.role === "admin") return <ManagerApp identity={identity} />;
+    return <StaffApp identity={identity} />;
+  }
   if (phase === "unknown") return <UnknownStaff />;
 
   // Not signed in → show the chooser / the selected sign-in path.

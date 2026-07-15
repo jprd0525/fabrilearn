@@ -20,7 +20,7 @@ import { supabase } from "./supabase-adapter";
 import { AuthGate } from "./auth-gate";   // engine file (untouched) — email sign-in + gate
 import AppShell from "./App.jsx";
 import StaffApp from "./screen-staff.jsx";      // staff dashboard (Step C)
-import ManagerApp from "./screen-manager.jsx";  // supervisor dashboard (Step D)
+import ManagerApp, { SupervisorShell } from "./screen-manager.jsx";  // supervisor dashboard (Step D)
 
 // ── Root gate: session → identity resolution → route ─────────────────────────
 export function RootGate() {
@@ -63,7 +63,7 @@ export function RootGate() {
   if (phase === "admin") return <AppShell />;
   if (phase === "staff") {
     // Route phone users by their bound role.
-    if (identity?.role === "supervisor" || identity?.role === "admin") return <ManagerApp identity={identity} />;
+    if (identity?.role === "supervisor" || identity?.role === "admin") return <SupervisorShell identity={identity} />;
     return <StaffApp identity={identity} />;
   }
   if (phase === "unknown") return <UnknownStaff />;

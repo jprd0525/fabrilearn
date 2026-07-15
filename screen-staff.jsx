@@ -20,7 +20,7 @@ import {
 const MODULE_BY_CODE = Object.fromEntries(SEED_MODULES.map((m) => [m.code, m]));
 
 // ── Root staff app ───────────────────────────────────────────────────────────
-export default function StaffApp({ identity }) {
+export default function StaffApp({ identity, switchSlot }) {
   const [assignments, setAssignments] = useState(null);   // null = loading
   const [attestations, setAttestations] = useState([]);
   const [runs, setRuns] = useState({});                   // module_code -> cmi
@@ -76,9 +76,12 @@ export default function StaffApp({ identity }) {
             <div className="text-[0.7rem] text-stone-400">{identity?.full_name || empId}</div>
           </div>
         </div>
-        <button onClick={() => supabase.auth.signOut()} className="inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm text-stone-500 hover:bg-stone-100">
-          <LogOut className="h-4 w-4" /> Sign out
-        </button>
+        <div className="flex items-center gap-2">
+          {switchSlot}
+          <button onClick={() => supabase.auth.signOut()} className="inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm text-stone-500 hover:bg-stone-100">
+            <LogOut className="h-4 w-4" /> Sign out
+          </button>
+        </div>
       </div>
 
       <div className="mx-auto max-w-2xl px-4 py-6">

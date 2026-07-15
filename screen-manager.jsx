@@ -9,11 +9,12 @@
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "./supabase-adapter";
 import { SEED_MODULES, daysUntil, todayISO } from "./fab-model";
+import StaffApp from "./screen-staff.jsx";
 import { HardHat, LogOut, ChevronLeft, PenLine, CheckCircle2, AlertTriangle, Users } from "lucide-react";
 
 const MODULE_BY_CODE = Object.fromEntries(SEED_MODULES.map((m) => [m.code, m]));
 
-export default function ManagerApp({ identity }) {
+export default function ManagerApp({ identity, switchSlot }) {
   const [roster, setRoster] = useState(null);     // [{employee_id, full_name, role, active}]
   const [assignments, setAssignments] = useState([]);
   const [attestations, setAttestations] = useState([]);
@@ -37,7 +38,12 @@ export default function ManagerApp({ identity }) {
       const byId = {};
       (prov.data || []).forEach((p) => { byId[p.employee_id] = { employee_id: p.employee_id, full_name: p.full_name, role: p.role, active: !!p.bound_user_id }; });
       (ident.data || []).forEach((i) => { byId[i.employee_id] = { employee_id: i.employee_id, full_name: i.full_name, role: i.role, active: true }; });
-      setRoster(Object.values(byId).filter((r) => r.role === "staff"));
+      // Team = everyone who takes training (staff + supervisors), EXCEPT yourself.
+      // You don't manage or sign off your own record here; your own training is
+      // under "My training", and another supervisor/admin signs off your competence.
+      setRoster(Object.values(byId).filter((r) =>
+        (r.role === "staff" || r.role === "supervisor") && r.employee_id !== identity?.employee_id
+      ));
       setAssignments(asg.data || []);
       setAttestations(att.data || []);
       setSignoffs(so.data || []);
@@ -70,9 +76,12 @@ export default function ManagerApp({ identity }) {
             <div className="text-[0.7rem] text-stone-400">{identity?.full_name || identity?.employee_id} · supervisor</div>
           </div>
         </div>
-        <button onClick={() => supabase.auth.signOut()} className="inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm text-stone-500 hover:bg-stone-100">
-          <LogOut className="h-4 w-4" /> Sign out
-        </button>
+        <div className="flex items-center gap-2">
+          {switchSlot}
+          <button onClick={() => supabase.auth.signOut()} className="inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm text-stone-500 hover:bg-stone-100">
+            <LogOut className="h-4 w-4" /> Sign out
+          </button>
+        </div>
       </div>
 
       <div className="mx-auto max-w-3xl px-4 py-6">
@@ -91,7 +100,10 @@ export default function ManagerApp({ identity }) {
                     <button key={r.employee_id} onClick={() => setSelected(r.employee_id)}
                       className="flex w-full items-center justify-between rounded-xl border border-stone-200 bg-white px-4 py-3 text-left hover:border-amber-300">
                       <div className="min-w-0">
-                        <div className="truncate text-sm font-medium text-stone-800">{r.full_name || r.employee_id}</div>
+                        <div className="flex items-center gap-2">
+                          <span className="truncate text-sm font-medium text-stone-800">{r.full_name || r.employee_id}</span>
+                          {r.role === "supervisor" && <span className="shrink-0 rounded-full bg-sky-50 px-1.5 py-0.5 text-[0.6rem] font-medium text-sky-600">supervisor</span>}
+                        </div>
                         <div className="text-[0.7rem] text-stone-400">{r.active ? "active" : "not logged in yet"} · {r.employee_id}</div>
                       </div>
                       <div className="ml-3 flex shrink-0 items-center gap-3 text-xs">
@@ -221,4 +233,21 @@ function Splash({ label }) {
       <div className="flex items-center gap-2 text-sm text-stone-400"><span className="h-4 w-4 animate-spin rounded-full border-2 border-stone-300 border-t-amber-500" /> {label || "Loading…"}</div>
     </div>
   );
+}
+
+// ── Supervisor shell: toggle between overseeing the team and taking own training ─
+// Supervisors are workers too. This gives them both hats behind one login: the
+// team view (manage/sign off others) and their own learner dashboard. Their own
+// practical competence is signed off by another supervisor or the admin — never
+// themselves (enforced in the DB).
+export function SupervisorShell({ identity }) {
+  const [view, setView] = useState("team");   // team | mine
+  const pill = (to, label) => (
+    <button onClick={() => setView(to)}
+      className="inline-flex items-center gap-1.5 rounded-lg border border-stone-200 px-3 py-1.5 text-sm font-medium text-stone-600 hover:bg-stone-50">
+      {label}
+    </button>
+  );
+  if (view === "mine") return <StaffApp identity={identity} switchSlot={pill("team", "My team")} />;
+  return <ManagerApp identity={identity} switchSlot={pill("mine", "My training")} />;
 }

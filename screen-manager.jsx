@@ -14,7 +14,7 @@ import { HardHat, LogOut, ChevronLeft, PenLine, CheckCircle2, AlertTriangle, Use
 
 const MODULE_BY_CODE = Object.fromEntries(SEED_MODULES.map((m) => [m.code, m]));
 
-export default function ManagerApp({ identity, switchSlot }) {
+export default function ManagerApp({ identity, switchSlot, onGoToMyTraining }) {
   const [roster, setRoster] = useState(null);     // [{employee_id, full_name, role, active}]
   const [assignments, setAssignments] = useState([]);
   const [attestations, setAttestations] = useState([]);
@@ -89,6 +89,7 @@ export default function ManagerApp({ identity, switchSlot }) {
 
         {!selectedEmp ? (
           <>
+            <MyTrainingBox assignments={assignments} identity={identity} onOpen={onGoToMyTraining} />
             <div className="mb-4 flex items-center gap-2 text-sm font-medium text-stone-600"><Users className="h-4 w-4" /> Your team <span className="text-stone-400">({roster.length})</span></div>
             {roster.length === 0 ? (
               <div className="rounded-2xl border border-dashed border-stone-300 bg-white p-8 text-center text-sm text-stone-400">No staff yet. Add employees and their mobile numbers to get started.</div>
@@ -227,6 +228,29 @@ function SignOffModal({ identity, target, onClose, onSigned }) {
   );
 }
 
+// ── Supervisor's own training summary (links into their learner view) ────────
+function MyTrainingBox({ assignments, identity, onOpen }) {
+  const mine = (assignments || []).filter((a) => a.employee_id === identity?.employee_id);
+  const outstanding = mine.filter((a) => !a.completed_on).length;
+  const total = mine.length;
+  if (total === 0) return null;   // nothing assigned to this supervisor
+  const allDone = outstanding === 0;
+  return (
+    <button onClick={onOpen}
+      className={`mb-5 flex w-full items-center justify-between rounded-2xl border px-5 py-4 text-left transition-colors ${allDone ? "border-emerald-200 bg-emerald-50 hover:bg-emerald-100" : "border-amber-200 bg-amber-50 hover:bg-amber-100"}`}>
+      <div>
+        <div className={`text-sm font-semibold ${allDone ? "text-emerald-800" : "text-amber-800"}`}>
+          {allDone ? "Your training is up to date" : `You have ${outstanding} training ${outstanding === 1 ? "item" : "items"} to complete`}
+        </div>
+        <div className={`text-xs ${allDone ? "text-emerald-600" : "text-amber-600"}`}>
+          {total - outstanding} of {total} complete · tap to open your training
+        </div>
+      </div>
+      <span className={`shrink-0 rounded-lg px-3 py-1.5 text-sm font-medium text-white ${allDone ? "bg-emerald-600" : "bg-amber-600"}`}>My training →</span>
+    </button>
+  );
+}
+
 function Splash({ label }) {
   return (
     <div className="flex min-h-screen items-center justify-center bg-stone-100">
@@ -249,5 +273,5 @@ export function SupervisorShell({ identity }) {
     </button>
   );
   if (view === "mine") return <StaffApp identity={identity} switchSlot={pill("team", "My team")} />;
-  return <ManagerApp identity={identity} switchSlot={pill("mine", "My training")} />;
+  return <ManagerApp identity={identity} switchSlot={pill("mine", "My training")} onGoToMyTraining={() => setView("mine")} />;
 }

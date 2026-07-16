@@ -185,10 +185,12 @@ function ArchiveControl({ employee, onDone }) {
   const [busy, setBusy] = useState(false);
   const isArchived = employee.active === false;
   const todayISO = new Date().toISOString().slice(0, 10);
+  const [lastDay, setLastDay] = useState(employee.endDate || todayISO);
 
   const doArchive = async () => {
+    if (!lastDay) return;
     setBusy(true);
-    await api.updateEmployee(employee.id, { active: false, endDate: employee.endDate || todayISO });
+    await api.updateEmployee(employee.id, { active: false, endDate: lastDay });
     setBusy(false); setConfirming(false); onDone?.();
   };
   const doRestore = async () => {
@@ -212,10 +214,13 @@ function ArchiveControl({ employee, onDone }) {
     );
   }
   return (
-    <div className="flex items-center gap-1 rounded-lg bg-amber-50 px-2 py-1">
-      <span className="text-xs text-amber-700">Archive &amp; end access?</span>
-      <button onClick={doArchive} disabled={busy} className="rounded-md bg-amber-600 px-2 py-0.5 text-xs font-medium text-white hover:bg-amber-700 disabled:opacity-50">{busy ? "…" : "Yes"}</button>
-      <button onClick={() => setConfirming(false)} className="rounded-md px-2 py-0.5 text-xs text-stone-500 hover:bg-stone-100">No</button>
+    <div className="flex items-center gap-2 rounded-lg bg-amber-50 px-3 py-2">
+      <label className="text-xs text-amber-800">Last day
+        <input type="date" value={lastDay} max={todayISO} onChange={(e) => setLastDay(e.target.value)}
+          className="ml-1.5 rounded border border-amber-300 bg-white px-1.5 py-0.5 text-xs text-stone-700 outline-none focus:border-amber-500" />
+      </label>
+      <button onClick={doArchive} disabled={busy || !lastDay} className="rounded-md bg-amber-600 px-2.5 py-1 text-xs font-medium text-white hover:bg-amber-700 disabled:opacity-50">{busy ? "…" : "Archive"}</button>
+      <button onClick={() => setConfirming(false)} className="rounded-md px-2 py-1 text-xs text-stone-500 hover:bg-stone-100">Cancel</button>
     </div>
   );
 }

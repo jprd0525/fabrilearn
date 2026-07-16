@@ -27,8 +27,8 @@ export default function ManagerApp({ identity, switchSlot }) {
     setErr("");
     try {
       const [ident, prov, asg, att, so] = await Promise.all([
-        supabase.from("staff_identities").select("employee_id, full_name, role"),
-        supabase.from("staff_provisioning").select("employee_id, full_name, role, bound_user_id"),
+        supabase.from("staff_identities").select("employee_id, full_name, role, active"),
+        supabase.from("staff_provisioning").select("employee_id, full_name, role, bound_user_id, active"),
         supabase.from("staff_assignments").select("*"),
         supabase.from("staff_attestations").select("employee_id, module_code, signed_name, signed_at"),
         supabase.from("staff_signoffs").select("*"),
@@ -36,8 +36,8 @@ export default function ManagerApp({ identity, switchSlot }) {
       if (ident.error) throw ident.error;
       // Merge active identities + provisioned (some may not have logged in yet).
       const byId = {};
-      (prov.data || []).forEach((p) => { byId[p.employee_id] = { employee_id: p.employee_id, full_name: p.full_name, role: p.role, active: !!p.bound_user_id }; });
-      (ident.data || []).forEach((i) => { byId[i.employee_id] = { employee_id: i.employee_id, full_name: i.full_name, role: i.role, active: true }; });
+      (prov.data || []).forEach((p) => { if (p.active !== false) byId[p.employee_id] = { employee_id: p.employee_id, full_name: p.full_name, role: p.role, active: !!p.bound_user_id }; });
+      (ident.data || []).forEach((i) => { if (i.active !== false) byId[i.employee_id] = { employee_id: i.employee_id, full_name: i.full_name, role: i.role, active: true }; });
       // Team = everyone who takes training (staff + supervisors), EXCEPT yourself.
       // You don't manage or sign off your own record here; your own training is
       // under "My training", and another supervisor/admin signs off your competence.

@@ -43,6 +43,11 @@ export function RootGate() {
         setPhase("unknown");
         return;
       }
+      if (row.active === false) {
+        // Employment ended — access is closed (records are retained for audit).
+        setPhase("archived");
+        return;
+      }
       setIdentity(row);
       setPhase("staff");
     } catch {
@@ -67,6 +72,7 @@ export function RootGate() {
     return <StaffApp identity={identity} />;
   }
   if (phase === "unknown") return <UnknownStaff />;
+  if (phase === "archived") return <AccessEnded />;
 
   // Not signed in → show the chooser / the selected sign-in path.
   // Admin path delegates to the engine's AuthGate (email sign-in → AppShell),
@@ -190,6 +196,23 @@ function UnknownStaff() {
       <div className="mt-6 rounded-xl border border-amber-200 bg-amber-50 p-5 text-center">
         <div className="text-sm font-medium text-amber-800">We couldn't find your employee record.</div>
         <div className="mt-1 text-xs text-amber-600">Ask your manager to add your mobile number, then try again.</div>
+      </div>
+      <button onClick={() => supabase.auth.signOut()}
+        className="mt-5 w-full rounded-lg border border-stone-200 px-3 py-2 text-sm text-stone-500 hover:bg-stone-50">
+        Back to sign-in
+      </button>
+    </Screen>
+  );
+}
+
+// ── Employment ended — access closed (records retained for audit) ────────────
+function AccessEnded() {
+  return (
+    <Screen>
+      <Brand />
+      <div className="mt-6 rounded-xl border border-stone-200 bg-stone-50 p-5 text-center">
+        <div className="text-sm font-medium text-stone-700">Your access has ended.</div>
+        <div className="mt-1 text-xs text-stone-500">This account is no longer active. If you think this is a mistake, please contact your manager.</div>
       </div>
       <button onClick={() => supabase.auth.signOut()}
         className="mt-5 w-full rounded-lg border border-stone-200 px-3 py-2 text-sm text-stone-500 hover:bg-stone-50">

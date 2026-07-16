@@ -8,28 +8,40 @@ import { useState } from "react";
 import { useShop } from "./shop-context";
 import { Button, Card, Field, TextInput, Select, Modal, EmptyState, Pill, SectionTitle } from "./ui";
 import { EMPLOYMENT_TYPES, TENURE_TYPES } from "./fab-model";
-import { Users, UserPlus, ChevronRight, X, Phone, Mail, MapPin, Clock3, Pencil, ClipboardList } from "lucide-react";
+import { Users, UserPlus, ChevronRight, X, Phone, Mail, MapPin, Clock3, Pencil, ClipboardList, Archive, RotateCcw } from "lucide-react";
 
 export default function EmployeesScreen() {
   const { shop, assignmentsByEmployee, readinessFor, roleById, goTo } = useShop();
   const [addOpen, setAddOpen] = useState(false);
   const [selectedId, setSelectedId] = useState(null);
+  const [showArchived, setShowArchived] = useState(false);
   const selected = shop.employees.find((e) => e.id === selectedId) || null;
+
+  const activeEmployees = shop.employees.filter((e) => e.active !== false);
+  const archivedEmployees = shop.employees.filter((e) => e.active === false);
+  const shownEmployees = showArchived ? archivedEmployees : activeEmployees;
 
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-lg font-semibold text-stone-800">Employees</h1>
-          <p className="text-sm text-stone-400">{shop.employees.length} {shop.employees.length === 1 ? "person" : "people"} at {shop.settings.shopName}</p>
+          <p className="text-sm text-stone-400">{activeEmployees.length} active {activeEmployees.length === 1 ? "person" : "people"} at {shop.settings.shopName}</p>
         </div>
         <Button onClick={() => setAddOpen(true)}><UserPlus className="h-4 w-4" /> Add employee</Button>
       </div>
 
-      {shop.employees.length === 0 ? (
-        <EmptyState icon={Users} title="No employees yet"
-          action={<Button onClick={() => setAddOpen(true)}><UserPlus className="h-4 w-4" /> Add your first employee</Button>}>
-          Add the people at your shop. Give each a role, and their onboarding training is proposed automatically for you to confirm in Training Assignments.
+      {archivedEmployees.length > 0 && (
+        <div className="flex gap-1 text-sm">
+          <button onClick={() => setShowArchived(false)} className={`rounded-lg px-3 py-1.5 font-medium ${!showArchived ? "bg-stone-800 text-white" : "text-stone-500 hover:bg-stone-100"}`}>Active ({activeEmployees.length})</button>
+          <button onClick={() => setShowArchived(true)} className={`rounded-lg px-3 py-1.5 font-medium ${showArchived ? "bg-stone-800 text-white" : "text-stone-500 hover:bg-stone-100"}`}>Former staff ({archivedEmployees.length})</button>
+        </div>
+      )}
+
+      {shownEmployees.length === 0 ? (
+        <EmptyState icon={Users} title={showArchived ? "No former staff" : "No employees yet"}
+          action={!showArchived && <Button onClick={() => setAddOpen(true)}><UserPlus className="h-4 w-4" /> Add your first employee</Button>}>
+          {showArchived ? "Archived employees appear here, with their training records retained for audit." : "Add the people at your shop. Give each a role, and their onboarding training is proposed automatically for you to confirm in Training Assignments."}
         </EmptyState>
       ) : (
         <Card>
@@ -38,14 +50,14 @@ export default function EmployeesScreen() {
               <tr>
                 <th className="px-4 py-2.5 font-medium">Name</th>
                 <th className="px-4 py-2.5 font-medium">Role</th>
-                <th className="px-4 py-2.5 font-medium">Employment</th>
+                <th className="px-4 py-2.5 font-medium">{showArchived ? "Last day" : "Employment"}</th>
                 <th className="px-4 py-2.5 font-medium">Training</th>
                 <th className="px-4 py-2.5 font-medium">Readiness</th>
                 <th className="px-4 py-2.5"></th>
               </tr>
             </thead>
             <tbody className="divide-y divide-stone-100">
-              {shop.employees.map((e) => {
+              {shownEmployees.map((e) => {
                 const asgs = assignmentsByEmployee[e.id] || [];
                 const active = asgs.filter((a) => !a.proposed);
                 const proposed = asgs.filter((a) => a.proposed);
@@ -57,7 +69,7 @@ export default function EmployeesScreen() {
                     <td className="px-4 py-3 font-medium text-stone-700">{e.name}</td>
                     <td className="px-4 py-3 text-stone-500">{role ? role.name : <span className="text-stone-300">—</span>}</td>
                     <td className="px-4 py-3 text-stone-500">
-                      {e.employmentType}{e.tenure === "Temporary" ? " · Temp" : ""}
+                      {showArchived ? (e.endDate || <span className="text-stone-300">—</span>) : <>{e.employmentType}{e.tenure === "Temporary" ? " · Temp" : ""}</>}
                     </td>
                     <td className="px-4 py-3 text-stone-500" onClick={(ev) => { ev.stopPropagation(); goTo("assignments", { focusEmployeeId: e.id }); }}>
                       {active.length === 0 && proposed.length === 0
@@ -69,7 +81,7 @@ export default function EmployeesScreen() {
                           </span>
                         )}
                     </td>
-                    <td className="px-4 py-3"><Pill tone={r.tone}>{r.label}</Pill></td>
+                    <td className="px-4 py-3">{showArchived ? <Pill tone="neutral">Archived</Pill> : <Pill tone={r.tone}>{r.label}</Pill>}</td>
                     <td className="px-4 py-3 text-right"><ChevronRight className="inline h-4 w-4 text-stone-300" /></td>
                   </tr>
                 );
@@ -136,7 +148,7 @@ function EmployeeModal({ employee, onClose }) {
           </Field>
         </div>
         <div className="grid grid-cols-2 gap-3">
-          <Field label="Phone"><TextInput value={f.phone} onChange={(e) => set("phone", e.target.value)} placeholder="(905) 555-0100" /></Field>
+          <Field label="Mobile phone (their login)"><TextInput value={f.phone} onChange={(e) => set("phone", e.target.value)} placeholder="(905) 555-0100" /></Field>
           <Field label="Email"><TextInput type="email" value={f.email} onChange={(e) => set("email", e.target.value)} placeholder="name@shop.example" /></Field>
         </div>
         <Field label="Address"><TextInput value={f.address} onChange={(e) => set("address", e.target.value)} placeholder="Street, city, postal code" /></Field>
@@ -161,6 +173,50 @@ function EmployeeModal({ employee, onClose }) {
         {note && <p className="rounded-lg bg-emerald-50 px-3 py-2 text-xs text-emerald-700">{note}</p>}
       </div>
     </Modal>
+  );
+}
+
+// ── Archive / restore an employee ────────────────────────────────────────────
+// Archiving is soft: the person leaves the active roster and can no longer log
+// in, but all their training records are retained for audit. Restore reactivates.
+function ArchiveControl({ employee, onDone }) {
+  const { api } = useShop();
+  const [confirming, setConfirming] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const isArchived = employee.active === false;
+  const todayISO = new Date().toISOString().slice(0, 10);
+
+  const doArchive = async () => {
+    setBusy(true);
+    await api.updateEmployee(employee.id, { active: false, endDate: employee.endDate || todayISO });
+    setBusy(false); setConfirming(false); onDone?.();
+  };
+  const doRestore = async () => {
+    setBusy(true);
+    await api.updateEmployee(employee.id, { active: true, endDate: "" });
+    setBusy(false); onDone?.();
+  };
+
+  if (isArchived) {
+    return (
+      <Button size="sm" variant="secondary" onClick={doRestore} disabled={busy}>
+        <RotateCcw className="h-3.5 w-3.5" /> {busy ? "…" : "Restore"}
+      </Button>
+    );
+  }
+  if (!confirming) {
+    return (
+      <Button size="sm" variant="secondary" onClick={() => setConfirming(true)}>
+        <Archive className="h-3.5 w-3.5" /> Archive
+      </Button>
+    );
+  }
+  return (
+    <div className="flex items-center gap-1 rounded-lg bg-amber-50 px-2 py-1">
+      <span className="text-xs text-amber-700">Archive &amp; end access?</span>
+      <button onClick={doArchive} disabled={busy} className="rounded-md bg-amber-600 px-2 py-0.5 text-xs font-medium text-white hover:bg-amber-700 disabled:opacity-50">{busy ? "…" : "Yes"}</button>
+      <button onClick={() => setConfirming(false)} className="rounded-md px-2 py-0.5 text-xs text-stone-500 hover:bg-stone-100">No</button>
+    </div>
   );
 }
 
@@ -193,11 +249,18 @@ function EmployeeDrawer({ employee, onClose }) {
           </div>
           <div className="flex items-center gap-1">
             <Button size="sm" variant="secondary" onClick={() => setEditOpen(true)}><Pencil className="h-3.5 w-3.5" /> Edit</Button>
+            <ArchiveControl employee={employee} onDone={onClose} />
             <button onClick={onClose} className="rounded-md p-1 text-stone-400 hover:bg-stone-100" aria-label="Close"><X className="h-5 w-5" /></button>
           </div>
         </div>
 
         <div className="flex-1 space-y-4 overflow-y-auto px-5 py-4">
+          {employee.active === false && (
+            <div className="rounded-lg border border-stone-300 bg-stone-100 px-4 py-3 text-sm">
+              <span className="font-medium text-stone-700">Archived — access ended{employee.endDate ? ` on ${employee.endDate}` : ""}.</span>
+              <span className="text-stone-500"> Training records are retained for audit. Use Restore to reactivate.</span>
+            </div>
+          )}
           {/* Contact / employment record */}
           <div>
             <SectionTitle>Record</SectionTitle>
@@ -206,6 +269,7 @@ function EmployeeDrawer({ employee, onClose }) {
               <RecordRow icon={Mail} label="Email" value={employee.email} />
               <RecordRow icon={MapPin} label="Address" value={employee.address} />
               <RecordRow icon={Clock3} label="Started" value={employee.startDate} />
+              {employee.endDate ? <RecordRow icon={Clock3} label="Last day" value={employee.endDate} /> : null}
             </Card>
           </div>
 

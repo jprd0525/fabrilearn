@@ -13,7 +13,7 @@ import { SEED_MODULES, daysUntil } from "./fab-model";
 import { createScormRuntime, persistableCmi, isPassingStatus, TEST_SCO_HTML } from "./fab-scorm";
 import { fetchLaunchDoc } from "./fab-content";
 import {
-  HardHat, LogOut, PlayCircle, CheckCircle2, PenLine, ChevronLeft, Check, BookOpen, RotateCcw,
+  HardHat, LogOut, PlayCircle, CheckCircle2, PenLine, ChevronLeft, Check, BookOpen, RotateCcw, FileText, ExternalLink,
 } from "lucide-react";
 
 // module_code -> catalogue metadata (title, area, contentCourseId, recurrence)
@@ -24,6 +24,9 @@ export default function StaffApp({ identity, switchSlot }) {
   const [assignments, setAssignments] = useState(null);   // null = loading
   const [attestations, setAttestations] = useState([]);
   const [runs, setRuns] = useState({});                   // module_code -> cmi
+  const [docReviews, setDocReviews] = useState([]);       // outstanding + done doc reviews
+  const [docs, setDocs] = useState({});                   // document_id -> {title, category}
+  const [docVersions, setDocVersions] = useState({});     // `${docId}:${version}` -> version row
   const [err, setErr] = useState("");
 
   const empId = identity?.employee_id;
@@ -31,15 +34,21 @@ export default function StaffApp({ identity, switchSlot }) {
   async function load() {
     setErr("");
     try {
-      const [a, at, r] = await Promise.all([
+      const [a, at, r, dr, dv, dd] = await Promise.all([
         supabase.from("staff_assignments").select("*").order("module_code"),
         supabase.from("staff_attestations").select("*"),
         supabase.from("staff_scorm_runs").select("module_code, cmi"),
+        supabase.from("staff_document_reviews").select("*"),
+        supabase.from("staff_document_versions").select("*"),
+        supabase.from("staff_documents").select("*"),
       ]);
       if (a.error) throw a.error;
       setAssignments(a.data || []);
       setAttestations(at.data || []);
       setRuns(Object.fromEntries((r.data || []).map((x) => [x.module_code, x.cmi])));
+      setDocReviews(dr.data || []);
+      setDocs(Object.fromEntries((dd.data || []).map((d) => [d.id, d])));
+      setDocVersions(Object.fromEntries((dv.data || []).map((v) => [`${v.document_id}:${v.version}`, v])));
     } catch (e) {
       setErr(e?.message || "Couldn't load your training.");
       setAssignments([]);
@@ -63,6 +72,19 @@ export default function StaffApp({ identity, switchSlot }) {
   const [openMod, setOpenMod] = useState(null);
   const [reviewMod, setReviewMod] = useState(null);
   const [attestMod, setAttestMod] = useState(null);
+  const [openDoc, setOpenDoc] = useState(null);   // a document review to read + acknowledge
+
+  // Only the CURRENT version of each document counts as an outstanding obligation;
+  // superseded-version rows (older) are historical and hidden from the to-do view.
+  const docsToReview = useMemo(() => {
+    const currentByDoc = {};
+    for (const dv of Object.values(docVersions)) {
+      currentByDoc[dv.document_id] = Math.max(currentByDoc[dv.document_id] || 0, dv.version);
+    }
+    return (docReviews || [])
+      .filter((r) => !r.acknowledged_on && r.version === currentByDoc[r.document_id])
+      .map((r) => ({ ...r, doc: docs[r.document_id], ver: docVersions[`${r.document_id}:${r.version}`] }));
+  }, [docReviews, docs, docVersions]);
 
   if (assignments === null) return <Splash label="Loading your training…" />;
 
@@ -97,6 +119,28 @@ export default function StaffApp({ identity, switchSlot }) {
 
         {err ? <p className="mb-4 rounded-lg bg-rose-50 px-3 py-2 text-xs text-rose-600">{err}</p> : null}
 
+        {docsToReview.length > 0 && (
+          <div className="mb-6">
+            <div className="mb-2 flex items-center gap-2 text-xs font-medium uppercase tracking-wide text-amber-700">
+              <FileText className="h-3.5 w-3.5" /> Documents to review <span className="rounded-full bg-amber-100 px-1.5 text-[0.65rem] text-amber-700">{docsToReview.length}</span>
+            </div>
+            <div className="space-y-2">
+              {docsToReview.map((r) => (
+                <div key={r.id} className="flex items-center justify-between rounded-xl border border-amber-200 bg-amber-50 px-4 py-3">
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2">
+                      <span className="truncate text-sm font-medium text-stone-800">{r.doc?.title || "Document"}</span>
+                      {r.version > 1 && <span className="shrink-0 rounded-full bg-amber-200 px-1.5 py-0.5 text-[0.6rem] font-medium text-amber-800">updated · v{r.version}</span>}
+                    </div>
+                    <div className="text-[0.7rem] text-amber-700">{r.doc?.category ? `${r.doc.category} · ` : ""}please read &amp; acknowledge</div>
+                  </div>
+                  <button onClick={() => setOpenDoc(r)} className="ml-3 shrink-0 inline-flex items-center gap-1.5 rounded-lg bg-amber-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-amber-700"><BookOpen className="h-4 w-4" /> Review</button>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
         {todo.length > 0 && (
           <Section title="To do" count={todo.length}>
             {todo.map((a) => {
@@ -129,12 +173,15 @@ export default function StaffApp({ identity, switchSlot }) {
           </Section>
         )}
 
-        {todo.length === 0 && done.length === 0 && (
+        {todo.length === 0 && done.length === 0 && docsToReview.length === 0 && (
           <div className="rounded-2xl border border-dashed border-stone-300 bg-white p-8 text-center text-sm text-stone-400">
             No training assigned yet. Your manager will assign your onboarding.
           </div>
         )}
       </div>
+
+      {openDoc && <DocReviewModal identity={identity} review={openDoc}
+        onClose={() => setOpenDoc(null)} onAcknowledged={() => { setOpenDoc(null); load(); }} />}
 
       {openMod && <ModulePlayer identity={identity} assignment={openMod} initialCmi={runs[openMod.module_code]}
         needsAttestation={!hasAttestation(openMod.module_code)}
@@ -337,6 +384,71 @@ function AttestModal({ identity, assignment, onClose, onSigned }) {
           <button onClick={onClose} className="flex-1 rounded-lg border border-stone-200 px-3 py-2 text-sm text-stone-500 hover:bg-stone-50">Cancel</button>
           <button onClick={sign} disabled={busy || !name.trim()} className="flex-1 rounded-lg bg-amber-600 px-3 py-2 text-sm font-medium text-white hover:bg-amber-700 disabled:opacity-50">{busy ? "Signing…" : "Sign & confirm"}</button>
         </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Document review + acknowledgement (version-aware) ────────────────────────
+function DocReviewModal({ identity, review, onClose, onAcknowledged }) {
+  const [name, setName] = useState(identity?.full_name || "");
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
+  const [read, setRead] = useState(false);
+  const doc = review.doc;
+  const ver = review.ver;
+
+  const acknowledge = async () => {
+    if (!name.trim() || busy) return;
+    setBusy(true); setErr("");
+    const { error } = await supabase.from("staff_document_reviews")
+      .update({ acknowledged_on: new Date().toISOString(), signed_name: name.trim() })
+      .eq("id", review.id);
+    if (error) { setErr(error.message || "Couldn't save your acknowledgement."); setBusy(false); return; }
+    onAcknowledged();
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex flex-col bg-stone-900/95">
+      <div className="flex items-center justify-between border-b border-stone-700 bg-stone-800 px-4 py-2.5 text-white">
+        <div className="min-w-0">
+          <div className="truncate text-sm font-semibold">{doc?.title || "Document"}</div>
+          <div className="text-xs text-stone-400">{doc?.category ? `${doc.category} · ` : ""}version {review.version}</div>
+        </div>
+        <button onClick={onClose} className="ml-4 inline-flex shrink-0 items-center gap-1.5 rounded-lg bg-stone-700 px-3 py-1.5 text-sm font-medium hover:bg-stone-600"><ChevronLeft className="h-4 w-4" /> Back</button>
+      </div>
+
+      <div className="flex-1 overflow-y-auto bg-white">
+        <div className="mx-auto max-w-2xl px-5 py-6">
+          {ver?.note && review.version > 1 && (
+            <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800"><span className="font-medium">What changed:</span> {ver.note}</div>
+          )}
+          {ver?.url ? (
+            <a href={ver.url} target="_blank" rel="noreferrer" onClick={() => setRead(true)}
+              className="mb-4 inline-flex items-center gap-1.5 rounded-lg bg-stone-100 px-3 py-2 text-sm font-medium text-stone-700 hover:bg-stone-200">
+              <ExternalLink className="h-4 w-4" /> Open the document
+            </a>
+          ) : null}
+          {ver?.body ? (
+            <div className="prose prose-sm whitespace-pre-wrap rounded-lg border border-stone-200 bg-stone-50 p-4 text-sm text-stone-700" onScroll={() => setRead(true)}>{ver.body}</div>
+          ) : (!ver?.url && <p className="text-sm text-stone-400">No content attached to this document.</p>)}
+          {(ver?.url || ver?.body) && !read && (
+            <button onClick={() => setRead(true)} className="mt-3 text-xs text-stone-400 underline hover:text-stone-600">I've read this document</button>
+          )}
+        </div>
+      </div>
+
+      <div className="border-t border-stone-200 bg-white px-4 py-3">
+        <div className="mx-auto flex max-w-2xl flex-col gap-2 sm:flex-row sm:items-center">
+          <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Type your full name to acknowledge"
+            className="flex-1 rounded-lg border border-stone-200 px-3 py-2 text-sm focus:border-amber-500 focus:outline-none" />
+          <button onClick={acknowledge} disabled={busy || !name.trim() || !read}
+            className="rounded-lg bg-amber-600 px-4 py-2 text-sm font-medium text-white hover:bg-amber-700 disabled:opacity-50">
+            {busy ? "Saving…" : "I acknowledge I've read this"}
+          </button>
+        </div>
+        {!read && <p className="mx-auto mt-1 max-w-2xl text-[0.7rem] text-stone-400">Open or read the document, then acknowledge.</p>}
+        {err ? <p className="mx-auto mt-1 max-w-2xl text-xs text-rose-600">{err}</p> : null}
       </div>
     </div>
   );

@@ -16,6 +16,7 @@ import SignoffsScreen from "./screen-signoffs";
 import DocumentsScreen from "./screen-documents";
 import ReportsScreen from "./screen-reports";
 import LearnerPreview from "./screen-learner";
+import SupervisorPreview from "./screen-supervisor-preview";
 import SettingsScreen from "./screen-settings";
 import { EmptyState } from "./ui";
 import {
@@ -50,6 +51,7 @@ function Shell() {
 
   // Learner preview takes over the full viewport (distinct staff-facing view).
   if (active === "learner" && !loading && !error) return <LearnerPreview />;
+  if (active === "supervisor" && !loading && !error) return <SupervisorPreview />;
 
   return (
     <div className="flex min-h-screen bg-stone-100 text-stone-800">
@@ -86,6 +88,10 @@ function Shell() {
           <button onClick={() => goTo("learner")}
             className="mb-1 flex w-full items-center gap-2.5 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm font-medium text-amber-800 hover:bg-amber-100">
             <Sparkles className="h-4 w-4" /> Preview staff view
+          </button>
+          <button onClick={() => goTo("supervisor")}
+            className="mb-1 flex w-full items-center gap-2.5 rounded-lg border border-sky-200 bg-sky-50 px-3 py-2 text-sm font-medium text-sky-800 hover:bg-sky-100">
+            <Sparkles className="h-4 w-4" /> Preview supervisor view
           </button>
           <div className="px-3 py-1.5 text-xs text-stone-400">Signed in as {ME}</div>
           <button onClick={chainSignOut}

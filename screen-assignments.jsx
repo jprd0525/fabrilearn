@@ -7,10 +7,11 @@
 import { useMemo, useState, useEffect } from "react";
 import { useShop } from "./shop-context";
 import { Button, Card, Select, Modal, EmptyState, Pill, StatusPill, SectionTitle } from "./ui";
+import { STATUS } from "./fab-model";
 import { ClipboardList, CheckCircle2, Plus, ChevronDown, ChevronRight, Inbox } from "lucide-react";
 
 export default function AssignmentsScreen() {
-  const { shop, assignmentsByEmployee, roleById, readinessFor, api, nav } = useShop();
+  const { shop, assignmentsByEmployee, roleById, readinessFor, api, nav, goTo } = useShop();
   const [assignOpen, setAssignOpen] = useState(false);
   const [expanded, setExpanded] = useState(() => new Set(nav.focusEmployeeId ? [nav.focusEmployeeId] : []));
 
@@ -99,7 +100,14 @@ export default function AssignmentsScreen() {
                                   </td>
                                   <td className="px-3 py-2 text-stone-500">{a.recurrenceLabel}</td>
                                   <td className="px-3 py-2 text-stone-500">{a.nextDue || "—"}</td>
-                                  <td className="px-3 py-2"><StatusPill status={a.status} /></td>
+                                  <td className="px-3 py-2">
+                                    {a.status === STATUS.AWAITING ? (
+                                      <button onClick={() => goTo("signoffs", { focusEmployeeId: e.id })}
+                                        className="rounded-md ring-1 ring-transparent transition hover:ring-amber-300" title="Go to sign-off">
+                                        <StatusPill status={a.status} />
+                                      </button>
+                                    ) : <StatusPill status={a.status} />}
+                                  </td>
                                 </tr>
                               ))}
                             </tbody>

@@ -5,7 +5,7 @@
 //     re-assess (supersede) with a checklist, result, notes, supervisor name.
 //   • Audit log — the sign-off chain with a Verify control.
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
 import { useShop } from "./shop-context";
 import { ME } from "./supabase-adapter";
 import { Button, Card, Field, TextInput, Modal, EmptyState, Pill, StatusPill } from "./ui";
@@ -47,9 +47,12 @@ function Tab({ on, onClick, icon: Icon, children }) {
 }
 
 function ByEmployee() {
-  const { shop, assignmentsByEmployee, signoffFor, roleById } = useShop();
-  const [selectedId, setSelectedId] = useState(shop.employees[0]?.id || null);
+  const { shop, assignmentsByEmployee, signoffFor, roleById, nav } = useShop();
+  const [selectedId, setSelectedId] = useState(nav.focusEmployeeId || shop.employees[0]?.id || null);
   const [signing, setSigning] = useState(null);
+
+  // If arriving via an "awaiting sign-off" link, focus that employee.
+  useEffect(() => { if (nav.focusEmployeeId) setSelectedId(nav.focusEmployeeId); }, [nav.focusEmployeeId]);
 
   if (shop.employees.length === 0) {
     return <EmptyState icon={Users} title="No employees yet">Add employees and assign machine-module training, then record their sign-offs here.</EmptyState>;

@@ -165,7 +165,7 @@ function NewSecureDocModal({ onClose, onDone }) {
     onDone();
   };
   return (
-    <Modal title="New document" onClose={onClose}>
+    <Modal open onClose={onClose} title="New document">
       <div className="space-y-3">
         <Field label="Title"><TextInput value={f.title} onChange={(e) => set("title", e.target.value)} placeholder="e.g. Silica Exposure Control Plan" /></Field>
         <Field label="Category (optional)"><TextInput value={f.category} onChange={(e) => set("category", e.target.value)} placeholder="e.g. Silica, PPE, Emergency" /></Field>
@@ -192,7 +192,7 @@ function PublishSecureModal({ document, onClose, onDone }) {
     onDone();
   };
   return (
-    <Modal title={`Publish new version — ${document.title}`} onClose={onClose}>
+    <Modal open onClose={onClose} title={`Publish new version — ${document.title}`}>
       <div className="space-y-3">
         <div className="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800">This becomes v{document.current_version + 1}. Every active staff member will be asked to re-acknowledge; prior acknowledgements are kept.</div>
         <Field label="What changed (shown to staff)"><TextInput value={f.note} onChange={(e) => set("note", e.target.value)} placeholder="e.g. Added HEPA vacuum requirement" /></Field>
@@ -210,7 +210,7 @@ function DocDetailModal({ document, reviews, roster, onClose }) {
   const ackedIds = new Set(cur.filter((r) => r.acknowledged_on).map((r) => r.employee_id));
   const nameFor = (id) => roster.find((r) => r.employee_id === id)?.full_name || id;
   return (
-    <Modal title={document.title} onClose={onClose}>
+    <Modal open onClose={onClose} title={document.title}>
       <div className="space-y-3">
         <div className="text-xs text-stone-500">Current version v{document.current_version}{document.category ? ` · ${document.category}` : ""}</div>
         <SectionTitle>Acknowledgement status</SectionTitle>

@@ -11,7 +11,7 @@ import { Button, Card, Field, TextInput, Select, Modal, EmptyState, Pill, Sectio
 import { DOCUMENT_CATEGORIES } from "./fab-model";
 import {
   FileText, FileCheck, Plus, Pencil, Trash2, ExternalLink, Users, History,
-  Check, PenLine, AlertCircle, Send,
+  Check, PenLine, AlertCircle, Send, Upload, Download,
 } from "lucide-react";
 
 export default function DocumentsScreen() {
@@ -150,30 +150,40 @@ function StaffReview() {
 
 function NewSecureDocModal({ onClose, onDone }) {
   const [f, setF] = useState({ title: "", category: "", url: "", body: "" });
+  const [file, setFile] = useState(null);
   const [busy, setBusy] = useState(false); const [err, setErr] = useState("");
   const set = (k, v) => setF((s) => ({ ...s, [k]: v }));
   const create = async () => {
     if (!f.title.trim() || busy) return;
     setBusy(true); setErr("");
-    const { data, error } = await supabase.from("staff_documents")
-      .insert({ tenant_id: (await currentTenant()), title: f.title.trim(), category: f.category.trim() || null })
-      .select().single();
-    if (error) { setErr(error.message); setBusy(false); return; }
-    const { error: pErr } = await supabase.rpc("publish_document_version", {
-      p_document_id: data.id, p_body: f.body.trim() || null, p_url: f.url.trim() || null, p_note: "Initial release", p_due: null });
-    if (pErr) { setErr(pErr.message); setBusy(false); return; }
-    onDone();
+    try {
+      const tenant = await currentTenant();
+      const { data, error } = await supabase.from("staff_documents")
+        .insert({ tenant_id: tenant, title: f.title.trim(), category: f.category.trim() || null })
+        .select().single();
+      if (error) throw error;
+      let fileRef = {};
+      if (file) fileRef = await uploadDocFile(file, tenant, data.id);
+      const { error: pErr } = await supabase.rpc("publish_document_version", {
+        p_document_id: data.id, p_body: f.body.trim() || null, p_url: f.url.trim() || null,
+        p_note: "Initial release", p_due: null,
+        p_storage_path: fileRef.storage_path || null, p_file_name: fileRef.file_name || null });
+      if (pErr) throw pErr;
+      onDone();
+    } catch (e) { setErr(e?.message || "Couldn't create the document."); setBusy(false); }
   };
   return (
     <Modal open onClose={onClose} title="New document">
       <div className="space-y-3">
         <Field label="Title"><TextInput value={f.title} onChange={(e) => set("title", e.target.value)} placeholder="e.g. Silica Exposure Control Plan" /></Field>
         <Field label="Category (optional)"><TextInput value={f.category} onChange={(e) => set("category", e.target.value)} placeholder="e.g. Silica, PPE, Emergency" /></Field>
+        <Field label="Upload a file (PDF recommended)"><FileInput file={file} onPick={setFile} /></Field>
+        <div className="text-center text-[0.7rem] text-stone-400">— or —</div>
         <Field label="Link to document (optional)"><TextInput value={f.url} onChange={(e) => set("url", e.target.value)} placeholder="https://…" /></Field>
-        <Field label="Or paste the text"><textarea value={f.body} onChange={(e) => set("body", e.target.value)} rows={4} className="w-full rounded-lg border border-stone-200 px-3 py-2 text-sm outline-none focus:border-amber-500" placeholder="Document text staff will read…" /></Field>
+        <Field label="Or paste the text"><textarea value={f.body} onChange={(e) => set("body", e.target.value)} rows={3} className="w-full rounded-lg border border-stone-200 px-3 py-2 text-sm outline-none focus:border-amber-500" placeholder="Document text staff will read…" /></Field>
         <p className="text-xs text-stone-400">Publishing asks every active staff member to review &amp; acknowledge this document.</p>
         {err ? <p className="text-xs text-rose-600">{err}</p> : null}
-        <div className="flex justify-end gap-2"><Button variant="secondary" onClick={onClose}>Cancel</Button><Button onClick={create} disabled={busy || !f.title.trim()}>{busy ? "…" : "Create & publish"}</Button></div>
+        <div className="flex justify-end gap-2"><Button variant="secondary" onClick={onClose}>Cancel</Button><Button onClick={create} disabled={busy || !f.title.trim()}>{busy ? "Uploading…" : "Create & publish"}</Button></div>
       </div>
     </Modal>
   );
@@ -181,25 +191,34 @@ function NewSecureDocModal({ onClose, onDone }) {
 
 function PublishSecureModal({ document, onClose, onDone }) {
   const [f, setF] = useState({ note: "", url: "", body: "" });
+  const [file, setFile] = useState(null);
   const [busy, setBusy] = useState(false); const [err, setErr] = useState("");
   const set = (k, v) => setF((s) => ({ ...s, [k]: v }));
   const publish = async () => {
     if (busy) return;
     setBusy(true); setErr("");
-    const { error } = await supabase.rpc("publish_document_version", {
-      p_document_id: document.id, p_body: f.body.trim() || null, p_url: f.url.trim() || null, p_note: f.note.trim() || null, p_due: null });
-    if (error) { setErr(error.message); setBusy(false); return; }
-    onDone();
+    try {
+      let fileRef = {};
+      if (file) fileRef = await uploadDocFile(file, document.tenant_id, document.id);
+      const { error } = await supabase.rpc("publish_document_version", {
+        p_document_id: document.id, p_body: f.body.trim() || null, p_url: f.url.trim() || null,
+        p_note: f.note.trim() || null, p_due: null,
+        p_storage_path: fileRef.storage_path || null, p_file_name: fileRef.file_name || null });
+      if (error) throw error;
+      onDone();
+    } catch (e) { setErr(e?.message || "Couldn't publish."); setBusy(false); }
   };
   return (
     <Modal open onClose={onClose} title={`Publish new version — ${document.title}`}>
       <div className="space-y-3">
         <div className="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800">This becomes v{document.current_version + 1}. Every active staff member will be asked to re-acknowledge; prior acknowledgements are kept.</div>
         <Field label="What changed (shown to staff)"><TextInput value={f.note} onChange={(e) => set("note", e.target.value)} placeholder="e.g. Added HEPA vacuum requirement" /></Field>
+        <Field label="Upload a file (PDF recommended)"><FileInput file={file} onPick={setFile} /></Field>
+        <div className="text-center text-[0.7rem] text-stone-400">— or —</div>
         <Field label="Link (optional)"><TextInput value={f.url} onChange={(e) => set("url", e.target.value)} placeholder="https://…" /></Field>
-        <Field label="Or paste the text"><textarea value={f.body} onChange={(e) => set("body", e.target.value)} rows={4} className="w-full rounded-lg border border-stone-200 px-3 py-2 text-sm outline-none focus:border-amber-500" /></Field>
+        <Field label="Or paste the text"><textarea value={f.body} onChange={(e) => set("body", e.target.value)} rows={3} className="w-full rounded-lg border border-stone-200 px-3 py-2 text-sm outline-none focus:border-amber-500" /></Field>
         {err ? <p className="text-xs text-rose-600">{err}</p> : null}
-        <div className="flex justify-end gap-2"><Button variant="secondary" onClick={onClose}>Cancel</Button><Button onClick={publish} disabled={busy}>{busy ? "…" : "Publish & notify"}</Button></div>
+        <div className="flex justify-end gap-2"><Button variant="secondary" onClick={onClose}>Cancel</Button><Button onClick={publish} disabled={busy}>{busy ? "Uploading…" : "Publish & notify"}</Button></div>
       </div>
     </Modal>
   );
@@ -233,10 +252,36 @@ function DocDetailModal({ document, reviews, roster, onClose }) {
   );
 }
 
+// Simple file picker with selected-name display.
+function FileInput({ file, onPick }) {
+  return (
+    <div className="flex items-center gap-2">
+      <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg border border-stone-200 bg-white px-3 py-1.5 text-sm text-stone-600 hover:bg-stone-50">
+        <Upload className="h-3.5 w-3.5" /> Choose file
+        <input type="file" className="hidden" accept=".pdf,.doc,.docx,.txt,.png,.jpg,.jpeg"
+          onChange={(e) => onPick(e.target.files?.[0] || null)} />
+      </label>
+      {file ? <span className="truncate text-xs text-stone-500">{file.name}</span> : <span className="text-xs text-stone-300">no file chosen</span>}
+    </div>
+  );
+}
+
 async function currentTenant() {
   // Resolve the admin's tenant via their (just-ensured) identity.
   const { data } = await supabase.from("staff_identities").select("tenant_id").limit(1).maybeSingle();
   return data?.tenant_id || "00000000-0000-0000-0000-0000000000f1";
+}
+
+// Upload a file to the private documents bucket under a tenant-scoped path.
+// Returns { storage_path, file_name } for the version row, or throws.
+async function uploadDocFile(file, tenantId, documentId) {
+  const safe = file.name.replace(/[^\w.\-]+/g, "_");
+  const path = `${tenantId}/${documentId}/${Date.now()}_${safe}`;
+  const { error } = await supabase.storage.from("documents").upload(path, file, {
+    cacheControl: "3600", upsert: false, contentType: file.type || "application/octet-stream",
+  });
+  if (error) throw error;
+  return { storage_path: path, file_name: file.name };
 }
 
 // ── Register ─────────────────────────────────────────────────────────────────

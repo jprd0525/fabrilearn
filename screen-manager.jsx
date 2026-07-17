@@ -10,7 +10,30 @@ import { useEffect, useMemo, useState } from "react";
 import { supabase } from "./supabase-adapter";
 import { SEED_MODULES, daysUntil, todayISO } from "./fab-model";
 import StaffApp from "./screen-staff.jsx";
-import { HardHat, LogOut, ChevronLeft, PenLine, CheckCircle2, AlertTriangle, Users, FileText, Plus } from "lucide-react";
+import { HardHat, LogOut, ChevronLeft, PenLine, CheckCircle2, AlertTriangle, Users, FileText, Plus, Upload } from "lucide-react";
+
+// Upload a file to the private documents bucket under a tenant-scoped path.
+async function uploadDocFile(file, tenantId, documentId) {
+  const safe = file.name.replace(/[^\w.\-]+/g, "_");
+  const path = `${tenantId}/${documentId}/${Date.now()}_${safe}`;
+  const { error } = await supabase.storage.from("documents").upload(path, file, {
+    cacheControl: "3600", upsert: false, contentType: file.type || "application/octet-stream",
+  });
+  if (error) throw error;
+  return { storage_path: path, file_name: file.name };
+}
+
+function DocFileInput({ file, onPick }) {
+  return (
+    <div className="mt-1 flex items-center gap-2">
+      <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg border border-stone-200 bg-white px-3 py-1.5 text-sm text-stone-600 hover:bg-stone-50">
+        <Upload className="h-3.5 w-3.5" /> Choose file
+        <input type="file" className="hidden" accept=".pdf,.doc,.docx,.txt,.png,.jpg,.jpeg" onChange={(e) => onPick(e.target.files?.[0] || null)} />
+      </label>
+      {file ? <span className="truncate text-xs text-stone-500">{file.name}</span> : <span className="text-xs text-stone-300">no file chosen</span>}
+    </div>
+  );
+}
 
 const MODULE_BY_CODE = Object.fromEntries(SEED_MODULES.map((m) => [m.code, m]));
 
@@ -321,21 +344,25 @@ function DocumentsManager({ identity, roster }) {
 function NewDocumentModal({ identity, onClose, onCreated }) {
   const [title, setTitle] = useState(""); const [category, setCategory] = useState("");
   const [body, setBody] = useState(""); const [url, setUrl] = useState("");
+  const [file, setFile] = useState(null);
   const [busy, setBusy] = useState(false); const [err, setErr] = useState("");
 
   const create = async () => {
     if (!title.trim() || busy) return;
     setBusy(true); setErr("");
-    // 1) create the document, 2) publish v1 (fans out to all active staff)
-    const { data, error } = await supabase.from("staff_documents")
-      .insert({ tenant_id: identity.tenant_id, title: title.trim(), category: category.trim() || null })
-      .select().single();
-    if (error) { setErr(error.message); setBusy(false); return; }
-    const { error: pErr } = await supabase.rpc("publish_document_version", {
-      p_document_id: data.id, p_body: body.trim() || null, p_url: url.trim() || null, p_note: "Initial release", p_due: null,
-    });
-    if (pErr) { setErr(pErr.message); setBusy(false); return; }
-    onCreated();
+    try {
+      const { data, error } = await supabase.from("staff_documents")
+        .insert({ tenant_id: identity.tenant_id, title: title.trim(), category: category.trim() || null })
+        .select().single();
+      if (error) throw error;
+      let fileRef = {};
+      if (file) fileRef = await uploadDocFile(file, identity.tenant_id, data.id);
+      const { error: pErr } = await supabase.rpc("publish_document_version", {
+        p_document_id: data.id, p_body: body.trim() || null, p_url: url.trim() || null, p_note: "Initial release", p_due: null,
+        p_storage_path: fileRef.storage_path || null, p_file_name: fileRef.file_name || null });
+      if (pErr) throw pErr;
+      onCreated();
+    } catch (e) { setErr(e?.message || "Couldn't create the document."); setBusy(false); }
   };
 
   return (
@@ -344,10 +371,11 @@ function NewDocumentModal({ identity, onClose, onCreated }) {
       <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="e.g. Silica Exposure Control Plan" className="mt-1 w-full rounded-lg border border-stone-200 px-3 py-2 text-sm focus:border-amber-500 focus:outline-none" />
       <label className="mt-3 block text-xs font-medium text-stone-500">Category (optional)</label>
       <input value={category} onChange={(e) => setCategory(e.target.value)} placeholder="e.g. Silica, PPE, Emergency" className="mt-1 w-full rounded-lg border border-stone-200 px-3 py-2 text-sm focus:border-amber-500 focus:outline-none" />
-      <label className="mt-3 block text-xs font-medium text-stone-500">Link to document (optional)</label>
+      <label className="mt-3 block text-xs font-medium text-stone-500">Upload a file (PDF recommended)</label>
+      <DocFileInput file={file} onPick={setFile} />
+      <label className="mt-3 block text-xs font-medium text-stone-500">Or link / paste text</label>
       <input value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://…" className="mt-1 w-full rounded-lg border border-stone-200 px-3 py-2 text-sm focus:border-amber-500 focus:outline-none" />
-      <label className="mt-3 block text-xs font-medium text-stone-500">Or paste the text</label>
-      <textarea value={body} onChange={(e) => setBody(e.target.value)} rows={4} placeholder="Document text staff will read…" className="mt-1 w-full rounded-lg border border-stone-200 px-3 py-2 text-sm focus:border-amber-500 focus:outline-none" />
+      <textarea value={body} onChange={(e) => setBody(e.target.value)} rows={3} placeholder="Document text staff will read…" className="mt-2 w-full rounded-lg border border-stone-200 px-3 py-2 text-sm focus:border-amber-500 focus:outline-none" />
       <p className="mt-2 text-[0.7rem] text-stone-400">Publishing asks every active staff member to review &amp; acknowledge this document.</p>
       {err ? <p className="mt-2 text-xs text-rose-600">{err}</p> : null}
       <ModalButtons busy={busy} onClose={onClose} onConfirm={create} confirmLabel="Create &amp; publish" disabled={!title.trim()} />
@@ -357,25 +385,31 @@ function NewDocumentModal({ identity, onClose, onCreated }) {
 
 function PublishVersionModal({ document, onClose, onPublished }) {
   const [body, setBody] = useState(""); const [url, setUrl] = useState(""); const [note, setNote] = useState("");
+  const [file, setFile] = useState(null);
   const [busy, setBusy] = useState(false); const [err, setErr] = useState("");
   const publish = async () => {
     if (busy) return;
     setBusy(true); setErr("");
-    const { error } = await supabase.rpc("publish_document_version", {
-      p_document_id: document.id, p_body: body.trim() || null, p_url: url.trim() || null, p_note: note.trim() || null, p_due: null,
-    });
-    if (error) { setErr(error.message); setBusy(false); return; }
-    onPublished();
+    try {
+      let fileRef = {};
+      if (file) fileRef = await uploadDocFile(file, document.tenant_id, document.id);
+      const { error } = await supabase.rpc("publish_document_version", {
+        p_document_id: document.id, p_body: body.trim() || null, p_url: url.trim() || null, p_note: note.trim() || null, p_due: null,
+        p_storage_path: fileRef.storage_path || null, p_file_name: fileRef.file_name || null });
+      if (error) throw error;
+      onPublished();
+    } catch (e) { setErr(e?.message || "Couldn't publish."); setBusy(false); }
   };
   return (
     <ModalShell title={`Publish new version — ${document.title}`} onClose={onClose}>
       <div className="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800">This becomes v{document.current_version + 1}. Every active staff member will be asked to re-acknowledge. Prior acknowledgements are kept.</div>
       <label className="mt-3 block text-xs font-medium text-stone-500">What changed (shown to staff)</label>
       <input value={note} onChange={(e) => setNote(e.target.value)} placeholder="e.g. Added HEPA vacuum requirement" className="mt-1 w-full rounded-lg border border-stone-200 px-3 py-2 text-sm focus:border-amber-500 focus:outline-none" />
-      <label className="mt-3 block text-xs font-medium text-stone-500">Link (optional)</label>
+      <label className="mt-3 block text-xs font-medium text-stone-500">Upload a file (PDF recommended)</label>
+      <DocFileInput file={file} onPick={setFile} />
+      <label className="mt-3 block text-xs font-medium text-stone-500">Or link / paste text</label>
       <input value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://…" className="mt-1 w-full rounded-lg border border-stone-200 px-3 py-2 text-sm focus:border-amber-500 focus:outline-none" />
-      <label className="mt-3 block text-xs font-medium text-stone-500">Or paste the text</label>
-      <textarea value={body} onChange={(e) => setBody(e.target.value)} rows={4} className="mt-1 w-full rounded-lg border border-stone-200 px-3 py-2 text-sm focus:border-amber-500 focus:outline-none" />
+      <textarea value={body} onChange={(e) => setBody(e.target.value)} rows={3} className="mt-2 w-full rounded-lg border border-stone-200 px-3 py-2 text-sm focus:border-amber-500 focus:outline-none" />
       {err ? <p className="mt-2 text-xs text-rose-600">{err}</p> : null}
       <ModalButtons busy={busy} onClose={onClose} onConfirm={publish} confirmLabel="Publish &amp; notify" />
     </ModalShell>

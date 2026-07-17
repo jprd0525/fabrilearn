@@ -395,8 +395,21 @@ function DocReviewModal({ identity, review, onClose, onAcknowledged }) {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
   const [read, setRead] = useState(false);
+  const [opening, setOpening] = useState(false);
   const doc = review.doc;
   const ver = review.ver;
+
+  const openFile = async () => {
+    if (opening) return;
+    setOpening(true); setErr("");
+    try {
+      const { data, error } = await supabase.storage.from("documents").createSignedUrl(ver.storage_path, 300);
+      if (error) throw error;
+      window.open(data.signedUrl, "_blank", "noopener");
+      setRead(true);
+    } catch (e) { setErr(e?.message || "Couldn't open the document."); }
+    setOpening(false);
+  };
 
   const acknowledge = async () => {
     if (!name.trim() || busy) return;
@@ -423,16 +436,22 @@ function DocReviewModal({ identity, review, onClose, onAcknowledged }) {
           {ver?.note && review.version > 1 && (
             <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800"><span className="font-medium">What changed:</span> {ver.note}</div>
           )}
+          {ver?.storage_path ? (
+            <button onClick={openFile} disabled={opening}
+              className="mb-4 inline-flex items-center gap-1.5 rounded-lg bg-amber-600 px-3 py-2 text-sm font-medium text-white hover:bg-amber-700 disabled:opacity-50">
+              <FileText className="h-4 w-4" /> {opening ? "Opening…" : `Open ${ver.file_name || "the document"}`}
+            </button>
+          ) : null}
           {ver?.url ? (
             <a href={ver.url} target="_blank" rel="noreferrer" onClick={() => setRead(true)}
               className="mb-4 inline-flex items-center gap-1.5 rounded-lg bg-stone-100 px-3 py-2 text-sm font-medium text-stone-700 hover:bg-stone-200">
-              <ExternalLink className="h-4 w-4" /> Open the document
+              <ExternalLink className="h-4 w-4" /> Open the link
             </a>
           ) : null}
           {ver?.body ? (
             <div className="prose prose-sm whitespace-pre-wrap rounded-lg border border-stone-200 bg-stone-50 p-4 text-sm text-stone-700" onScroll={() => setRead(true)}>{ver.body}</div>
-          ) : (!ver?.url && <p className="text-sm text-stone-400">No content attached to this document.</p>)}
-          {(ver?.url || ver?.body) && !read && (
+          ) : (!ver?.url && !ver?.storage_path && <p className="text-sm text-stone-400">No content attached to this document.</p>)}
+          {(ver?.url || ver?.body || ver?.storage_path) && !read && (
             <button onClick={() => setRead(true)} className="mt-3 text-xs text-stone-400 underline hover:text-stone-600">I've read this document</button>
           )}
         </div>

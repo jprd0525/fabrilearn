@@ -17,10 +17,11 @@ import DocumentsScreen from "./screen-documents";
 import ReportsScreen from "./screen-reports";
 import LearnerPreview from "./screen-learner";
 import SettingsScreen from "./screen-settings";
+import CourseLibraryScreen from "./screen-library";
 import { EmptyState } from "./ui";
 import {
   HardHat, LayoutDashboard, Users, ClipboardList, BookOpen, FileSignature,
-  CheckSquare, FolderArchive, BarChart3, FileText, Settings, LogOut, Loader2, Hammer, Sparkles,
+  CheckSquare, FolderArchive, BarChart3, FileText, Settings, LogOut, Loader2, Hammer, Sparkles, Library,
 } from "lucide-react";
 
 const NAV = [
@@ -28,6 +29,7 @@ const NAV = [
   { id: "employees",   label: "Employees",            icon: Users,           stage: 3, live: true },
   { id: "assignments", label: "Training Assignments", icon: ClipboardList,   stage: 3, live: true },
   { id: "courses",     label: "Courses",              icon: BookOpen,        stage: 3, live: true },
+  { id: "library",     label: "Course Library",       icon: Library,         stage: 6, live: true },
   { id: "attestations",label: "Attestations",         icon: FileSignature,   stage: 4, live: true },
   { id: "signoffs",    label: "Supervisor Sign-offs", icon: CheckSquare,     stage: 4, live: true },
   { id: "records",     label: "Training Records",     icon: FolderArchive,   stage: 3, live: true },
@@ -117,6 +119,7 @@ function Screen({ id }) {
   if (id === "employees") return <EmployeesScreen />;
   if (id === "assignments") return <AssignmentsScreen />;
   if (id === "courses") return <CoursesScreen />;
+  if (id === "library") return <CourseLibraryScreen />;
   if (id === "records") return <RecordsScreen />;
   if (id === "attestations") return <AttestationsScreen />;
   if (id === "signoffs") return <SignoffsScreen />;

@@ -21,8 +21,8 @@ export default function CoursesScreen() {
   return (
     <div className="space-y-4">
       <div>
-        <h1 className="text-lg font-semibold text-stone-800">Courses</h1>
-        <p className="text-sm text-stone-400">The training catalogue and the profiles your roles draw from.</p>
+        <h1 className="text-lg font-semibold text-stone-800">Training Modules</h1>
+        <p className="text-sm text-stone-400">Your shop's training topics, and the role profiles they're drawn into. To add courses from the catalogue, use Course Library.</p>
       </div>
 
       <div className="inline-flex rounded-lg border border-stone-200 bg-white p-0.5 text-sm">

@@ -24,18 +24,21 @@ import {
   CheckSquare, FolderArchive, BarChart3, FileText, Settings, LogOut, Loader2, Hammer, Sparkles, Library,
 } from "lucide-react";
 
+// Grouped by function so the menu maps to what a manager is doing:
+// People (manage users) · Content (manage courses & docs) · Learning (assign & track).
+// Dashboard sits on top and Settings at the bottom, both ungrouped.
 const NAV = [
-  { id: "dashboard",   label: "Dashboard",            icon: LayoutDashboard, stage: 3, live: true },
-  { id: "employees",   label: "Employees",            icon: Users,           stage: 3, live: true },
-  { id: "assignments", label: "Training Assignments", icon: ClipboardList,   stage: 3, live: true },
-  { id: "courses",     label: "Courses",              icon: BookOpen,        stage: 3, live: true },
-  { id: "library",     label: "Course Library",       icon: Library,         stage: 6, live: true },
-  { id: "attestations",label: "Attestations",         icon: FileSignature,   stage: 4, live: true },
-  { id: "signoffs",    label: "Supervisor Sign-offs", icon: CheckSquare,     stage: 4, live: true },
-  { id: "records",     label: "Training Records",     icon: FolderArchive,   stage: 3, live: true },
-  { id: "reports",     label: "Reports",              icon: BarChart3,       stage: 5, live: true },
-  { id: "documents",   label: "Documents",            icon: FileText,        stage: 5, live: true },
-  { id: "settings",    label: "Settings",             icon: Settings,        stage: 3, live: true },
+  { id: "dashboard",   label: "Dashboard",            icon: LayoutDashboard, group: null,       stage: 3, live: true },
+  { id: "employees",   label: "Employees",            icon: Users,           group: "People",   stage: 3, live: true },
+  { id: "library",     label: "Course Library",       icon: Library,         group: "Content",  stage: 6, live: true },
+  { id: "courses",     label: "Training Modules",     icon: BookOpen,        group: "Content",  stage: 3, live: true },
+  { id: "documents",   label: "Documents",            icon: FileText,        group: "Content",  stage: 5, live: true },
+  { id: "assignments", label: "Training Assignments", icon: ClipboardList,   group: "Learning", stage: 3, live: true },
+  { id: "attestations",label: "Attestations",         icon: FileSignature,   group: "Learning", stage: 4, live: true },
+  { id: "signoffs",    label: "Supervisor Sign-offs", icon: CheckSquare,     group: "Learning", stage: 4, live: true },
+  { id: "records",     label: "Training Records",     icon: FolderArchive,   group: "Learning", stage: 3, live: true },
+  { id: "reports",     label: "Reports",              icon: BarChart3,       group: "Learning", stage: 5, live: true },
+  { id: "settings",    label: "Settings",             icon: Settings,        group: null,       stage: 3, live: true },
 ];
 
 export default function AppShell() {
@@ -69,17 +72,27 @@ function Shell() {
         </div>
 
         <nav className="flex-1 space-y-0.5 p-2">
-          {NAV.map((item) => {
+          {NAV.map((item, i) => {
             const Icon = item.icon;
             const on = active === item.id;
+            // Section header above the first item of each named group.
+            const prevGroup = i > 0 ? NAV[i - 1].group : null;
+            const showHeader = item.group && item.group !== prevGroup;
             return (
-              <button key={item.id} onClick={() => goTo(item.id)}
-                className={"flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-sm transition " +
-                  (on ? "bg-amber-50 font-medium text-amber-800" : "text-stone-600 hover:bg-stone-100")}>
-                <Icon className="h-4 w-4 shrink-0" />
-                <span className="flex-1 text-left">{item.label}</span>
-                {item.live && <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" title="Built" />}
-              </button>
+              <div key={item.id}>
+                {showHeader && (
+                  <div className="px-3 pb-1 pt-3 text-[0.6rem] font-semibold uppercase tracking-wider text-stone-400">
+                    {item.group}
+                  </div>
+                )}
+                <button onClick={() => goTo(item.id)}
+                  className={"flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-sm transition " +
+                    (on ? "bg-amber-50 font-medium text-amber-800" : "text-stone-600 hover:bg-stone-100")}>
+                  <Icon className="h-4 w-4 shrink-0" />
+                  <span className="flex-1 text-left">{item.label}</span>
+                  {item.live && <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" title="Built" />}
+                </button>
+              </div>
             );
           })}
         </nav>
